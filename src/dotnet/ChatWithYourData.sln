@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DocumentCleanUp", "Document
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Domain", "Domain\Domain.csproj", "{0B8A745B-B8CA-43AF-9FED-0B452E3568C2}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DocUploadHelper", "DocUploadHelper\DocUploadHelper.csproj", "{4EF48CB7-AC6A-4A62-A91E-16DBEEADF8AB}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{0B8A745B-B8CA-43AF-9FED-0B452E3568C2}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0B8A745B-B8CA-43AF-9FED-0B452E3568C2}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0B8A745B-B8CA-43AF-9FED-0B452E3568C2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4EF48CB7-AC6A-4A62-A91E-16DBEEADF8AB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4EF48CB7-AC6A-4A62-A91E-16DBEEADF8AB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4EF48CB7-AC6A-4A62-A91E-16DBEEADF8AB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4EF48CB7-AC6A-4A62-A91E-16DBEEADF8AB}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

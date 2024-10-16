@@ -27,10 +27,19 @@ public class DocumentCleanUpFunction
         LeaseContainerName = "%CosmosDbLeaseContainer%",
         CreateLeaseContainerIfNotExists = true)] IReadOnlyList<DocsPerThread> input)
     {
-        if (input != null && input.Count > 0)
+        
+        for (int i = 0; i < input.Count; i++)
         {
-            _logger.LogInformation("Documents modified: " + input.Count);
-            _logger.LogInformation("First document Id: " + input[0].Id);
+            var doc = input[i];
+            if (doc.Deleted)
+            {
+                _logger.LogInformation($"Document {doc.DocumentName} is marked for deletion. Deleting...");
+
+            }
+            else
+            {
+                _logger.LogInformation($"Document {doc.DocumentName} is not marked for deletion.");
+            }
         }
     }
 }
