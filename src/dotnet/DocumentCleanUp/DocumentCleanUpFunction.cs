@@ -1,43 +1,37 @@
 using System;
 using System.Collections.Generic;
+using Domain;
 using Microsoft.Azure.Functions.Worker;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
-namespace DocumentCleanUp
+namespace DocumentCleanUp;
+
+public class DocumentCleanUpFunction
 {
-    public class DocumentCleanUpFunction
+    private readonly ILogger _logger;
+    private IConfiguration _config;
+    
+
+    public DocumentCleanUpFunction(ILoggerFactory loggerFactory, IConfiguration config)
     {
-        private readonly ILogger _logger;
-
-        public DocumentCleanUpFunction(ILoggerFactory loggerFactory)
-        {
-            _logger = loggerFactory.CreateLogger<DocumentCleanUpFunction>();
-        }
-
-        [Function("DocumentCleanUp")]
-        public void Run([CosmosDBTrigger(
-            databaseName: "databaseName",
-            containerName: "containerName",
-            Connection = "CosmosDbConnection",
-            LeaseContainerName = "leases",
-            CreateLeaseContainerIfNotExists = true)] IReadOnlyList<MyDocument> input)
-        {
-            if (input != null && input.Count > 0)
-            {
-                _logger.LogInformation("Documents modified: " + input.Count);
-                _logger.LogInformation("First document Id: " + input[0].id);
-            }
-        }
+        _logger = loggerFactory.CreateLogger<DocumentCleanUpFunction>();
+        _config = config;
     }
 
-    public class MyDocument
+    [Function("DocumentCleanUp")]
+    public void Run([CosmosDBTrigger(
+        databaseName: "%CosmosDBDatabase%",
+        containerName: "%CosmosDBContainer%",
+        Connection = "CosmosDbConnection",
+        LeaseContainerName = "%CosmosDbLeaseContainer%",
+        CreateLeaseContainerIfNotExists = true)] IReadOnlyList<DocsPerThread> input)
     {
-        public string id { get; set; }
-
-        public string Text { get; set; }
-
-        public int Number { get; set; }
-
-        public bool Boolean { get; set; }
+        if (input != null && input.Count > 0)
+        {
+            _logger.LogInformation("Documents modified: " + input.Count);
+            _logger.LogInformation("First document Id: " + input[0].Id);
+        }
     }
 }
+
