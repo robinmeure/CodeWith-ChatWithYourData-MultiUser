@@ -1,43 +1,46 @@
 using System;
 using System.Collections.Generic;
+using Domain;
 using Microsoft.Azure.Functions.Worker;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
-namespace DocumentCleanUp
+namespace DocumentCleanUp;
+
+public class DocumentCleanUpFunction
 {
-    public class DocumentCleanUpFunction
+    private readonly ILogger _logger;
+    private IConfiguration _config;
+    
+
+    public DocumentCleanUpFunction(ILoggerFactory loggerFactory, IConfiguration config)
     {
-        private readonly ILogger _logger;
+        _logger = loggerFactory.CreateLogger<DocumentCleanUpFunction>();
+        _config = config;
+    }
 
-        public DocumentCleanUpFunction(ILoggerFactory loggerFactory)
+    [Function("DocumentCleanUp")]
+    public void Run([CosmosDBTrigger(
+        databaseName: "%CosmosDBDatabase%",
+        containerName: "%CosmosDBContainer%",
+        Connection = "CosmosDbConnection",
+        LeaseContainerName = "%CosmosDbLeaseContainer%",
+        CreateLeaseContainerIfNotExists = true)] IReadOnlyList<DocsPerThread> input)
+    {
+        
+        for (int i = 0; i < input.Count; i++)
         {
-            _logger = loggerFactory.CreateLogger<DocumentCleanUpFunction>();
-        }
-
-        [Function("DocumentCleanUp")]
-        public void Run([CosmosDBTrigger(
-            databaseName: "databaseName",
-            containerName: "containerName",
-            Connection = "CosmosDbConnection",
-            LeaseContainerName = "leases",
-            CreateLeaseContainerIfNotExists = true)] IReadOnlyList<MyDocument> input)
-        {
-            if (input != null && input.Count > 0)
+            var doc = input[i];
+            if (doc.Deleted)
             {
-                _logger.LogInformation("Documents modified: " + input.Count);
-                _logger.LogInformation("First document Id: " + input[0].id);
+                _logger.LogInformation($"Document {doc.DocumentName} is marked for deletion. Deleting...");
+
+            }
+            else
+            {
+                _logger.LogInformation($"Document {doc.DocumentName} is not marked for deletion.");
             }
         }
     }
-
-    public class MyDocument
-    {
-        public string id { get; set; }
-
-        public string Text { get; set; }
-
-        public int Number { get; set; }
-
-        public bool Boolean { get; set; }
-    }
 }
+
