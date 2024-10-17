@@ -1,13 +1,26 @@
-﻿namespace Domain
-{
-    public class DocsPerThread
-    {
-        public string id { get; set; }
-        public string ThreadId { get; set; }
-        public string UserId { get; set; }
-        public string DocumentName { get; set; }
-        public bool Deleted { get; set; } = false;
-        public bool AvailableInSearchIndex { get; set; } = false;
+﻿using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
+namespace Domain
+{
+    public record DocsPerThread
+    {
+        [JsonProperty(PropertyName = "id")]
+        public required string Id { get; set; }
+
+        [JsonProperty(PropertyName = "threadId")]
+        public required string ThreadId { get; set; }
+
+        [JsonProperty(PropertyName = "userId")]
+        public required string UserId { get; set; }
+
+        [JsonProperty(PropertyName = "documentName")]
+        public required string DocumentName { get; set; }
+
+        [JsonProperty(PropertyName = "deleted")]
+        public bool Deleted { get; set; } = false;
+
+        [JsonProperty(PropertyName = "availableInSearchIndex")]
+        public bool AvailableInSearchIndex { get; set; } = false;
     }
 }
