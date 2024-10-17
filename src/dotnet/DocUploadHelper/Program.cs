@@ -2,6 +2,7 @@
 using Azure.Identity;
 using Azure.Storage.Blobs;
 using Domain;
+using Infrastructure;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Configuration;
 using System.IO.Enumeration;
@@ -17,7 +18,7 @@ var configuration = builder.Build();
 //create a blob client
 var serviceUri = $"https://{configuration["StorageAccountName"]}.blob.core.windows.net";
 var blobServiceClient = new BlobServiceClient(new Uri(serviceUri), new AzureCliCredential());
-var blobContainerClient = blobServiceClient.GetBlobContainerClient(configuration["StorageContainerName"]);
+IDocumentStore store = new BlobDocumentStore(blobServiceClient);
 
 //create a cosmos client
 var cosmosClient = new CosmosClient(configuration["CosmosDbAccountEndpoint"], new AzureCliCredential());
@@ -27,23 +28,23 @@ var container = database.GetContainer(configuration["CosmosDBContainer"]);
 
 
 //upload the files in folder Docs
+
+var threadId = Guid.NewGuid().ToString();
+
 var docsFolder = Directory.GetCurrentDirectory() + "/Docs";
 var docs = new DirectoryInfo(docsFolder).GetFiles();
 foreach (var doc in docs)
 {
-    var blobClient = blobContainerClient.GetBlobClient(doc.Name);
-    await blobClient.UploadAsync(doc.FullName, true);
+    var docId = await store.AddDocumentAsync(doc.FullName, threadId, configuration["StorageContainerName"]);
     Console.WriteLine($"Uploaded {doc.Name}");
 
-    var docId = Guid.NewGuid().ToString();
-
+    
        var entry = new DocsPerThread
     {
         Deleted = false,
         DocumentName = doc.Name,
-        DocumentUri = blobClient.Uri.ToString(),
         id = docId,
-        ThreadId = "1",
+        ThreadId = threadId,
         UserId = "test@microsoft.com"
 
     };
