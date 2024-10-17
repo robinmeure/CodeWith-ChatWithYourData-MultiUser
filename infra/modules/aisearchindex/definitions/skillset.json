@@ -29,7 +29,7 @@
             "name": "Create embeddings",
             "context": "/document/pages/*",
             "resourceUri": "{AZURE_OPENAI_RESOURCE_URI}",
-            "deploymentId": "{EMBEDDING_DEPLOYMENT_NAME}",
+            "deploymentId": "{INDEXER_EMBEDDING_MODEL_ID}",
             "dimensions": 1536,
             "modelName": "{EMBEDDING_MODEL_NAME}",
             "inputs": [
@@ -68,6 +68,14 @@
                     {
                         "name": "thread_id",
                         "source": "/document/threadId"
+                    },
+                    {
+                        "name": "file_name",
+                        "source": "/document/originalFilename"
+                    },
+                    {
+                        "name": "document_id",
+                        "source": "/document/documentId"
                     }
                 ]
             }

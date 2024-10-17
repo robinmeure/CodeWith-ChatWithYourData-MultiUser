@@ -10,11 +10,14 @@ param storageAccountContainerName string
 @description('Resource ID of the storage account, used for setting the credentials for the data source.')
 param storageAccountResourceId string
 
-@description('Id of the embedding model to be used for the indexer.')
-param embeddingModelId string
-
-@description('Name of the embedding model to be used for the indexer.')
+@description('Name of the embedding model.')
 param embeddingModelName string
+
+@description('Id of the embedding model to be used for the indexer.')
+param indexerEmbeddingModelId string
+
+@description('Name of the embedding model to be used for the indexer during querying.')
+param integratedVectorEmbeddingModelId string = 'text-embedding-ada-002'
 
 @description('URI of the Azure OpenAI resource.')
 param azureOpenAIEndpoint string
@@ -80,7 +83,7 @@ module aiSearchIndexDeploymentScript 'br/public:avm/res/resources/deployment-scr
     cleanupPreference: 'OnExpiration'
     retentionInterval: 'PT1H'
     scriptContent: loadTextContent('./scripts/setupindex.ps1')
-    arguments: '-index \\"${index}\\" -indexer \\"${indexer}\\" -datasource \\"${dataSource}\\" -skillset \\"${skillset}\\" -searchServiceName \\"${aiSearchName}\\" -dataSourceContainerName \\"${storageAccountContainerName}\\" -dataSourceConnectionString \\"ResourceId=${storageAccountResourceId};\\" -indexName \\"${indexName}\\" -AzureOpenAIResourceUri \\"${azureOpenAIEndpoint}\\" -embeddingDeploymentName \\"${embeddingModelId}\\" -embeddingModelName \\"${embeddingModelName}\\"'
+    arguments: '-index \\"${index}\\" -indexer \\"${indexer}\\" -datasource \\"${dataSource}\\" -skillset \\"${skillset}\\" -searchServiceName \\"${aiSearchName}\\" -dataSourceContainerName \\"${storageAccountContainerName}\\" -dataSourceConnectionString \\"ResourceId=${storageAccountResourceId};\\" -indexName \\"${indexName}\\" -AzureOpenAIResourceUri \\"${azureOpenAIEndpoint}\\" -indexerEmbeddingModelId \\"${indexerEmbeddingModelId}\\" -embeddingModelName \\"${embeddingModelName}\\" -searchEmbeddingModelId \\"${integratedVectorEmbeddingModelId}\\"'
   }
 }
 

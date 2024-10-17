@@ -3,6 +3,9 @@
     "dataSourceName": "{INDEX_NAME}-datasource",
     "skillsetName": "{INDEX_NAME}-skillset",
     "targetIndexName": "{INDEX_NAME}",
+    "schedule": {
+        "interval": "PT5M"
+    },
     "parameters": {
         "configuration": {
             "dataToExtract": "contentAndMetadata",

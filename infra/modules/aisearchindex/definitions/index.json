@@ -48,6 +48,28 @@
             "key": false
         },
         {
+            "name": "file_name",
+            "type": "Edm.String",
+            "searchable": true,
+            "filterable": false,
+            "retrievable": true,
+            "stored": true,
+            "sortable": false,
+            "facetable": false,
+            "key": false
+        },
+        {
+            "name": "document_id",
+            "type": "Edm.String",
+            "searchable": true,
+            "filterable": true,
+            "retrievable": true,
+            "stored": true,
+            "sortable": false,
+            "facetable": false,
+            "key": false
+        },
+        {
             "name": "content_vector",
             "type": "Collection(Edm.Single)",
             "searchable": true,
@@ -98,7 +120,7 @@
                 "kind": "azureOpenAI",
                 "azureOpenAIParameters": {
                     "resourceUri": "{AZURE_OPENAI_RESOURCE_URI}",
-                    "deploymentId": "{EMBEDDING_DEPLOYMENT_NAME}",
+                    "deploymentId": "{SEARCH_EMBEDDING_MODEL_ID}",
                     "modelName": "{EMBEDDING_MODEL_NAME}"
                 }
             }

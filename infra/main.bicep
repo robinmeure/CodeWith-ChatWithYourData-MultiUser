@@ -10,11 +10,14 @@ param azureOpenAIName string = 'openai-${uniqueString(resourceGroup().id)}'
 @description('Name of the blob storage container that contains the documents for the index.')
 param blobStorageContainerName string = 'documents'
 
-@description('Id of the embedding model to be used for the indexer.')
-param embeddingModelId string = 'text-embedding-ada-002'
-
-@description('Name of the embedding model to be used for the indexer.')
+@description('Name of the embedding model to use.')
 param embeddingModelName string = 'text-embedding-ada-002'
+
+@description('Name/id of the embedding model to be used for the indexer during indexing.')
+param indexerEmbeddingModelId string = 'text-embedding-ada-002-indexer'
+
+@description('Name/id of the embedding model to be used for the indexer during querying.')
+param integratedVectorEmbeddingModelId string = 'text-embedding-ada-002-aisearchquery'
 
 @description('Name of the AI search index to be created or updated, must be lowercase.')
 param indexName string = 'onyourdata'
@@ -71,10 +74,18 @@ module openAi './modules/cognitiveservices/cognitive-services.bicep' = {
       {
         model: {
           format: 'OpenAI'
-          name: embeddingModelId
+          name: embeddingModelName
           version: '2'
         }
-        name: embeddingModelName
+        name: indexerEmbeddingModelId
+      }
+      {
+        model: {
+          format: 'OpenAI'
+          name: embeddingModelName
+          version: '2'
+        }
+        name: integratedVectorEmbeddingModelId
       }
     ]
     aiSearchManagedIdentity: aiSearch.outputs.systemAssignedMIPrincipalId
@@ -88,8 +99,9 @@ module aiSearchIndex 'modules/aisearchindex/ai-search-index.bicep' = {
     aiSearchName: aiSearch.outputs.name
     storageAccountContainerName: blobStorageContainerName
     storageAccountResourceId: storageAccount.outputs.resourceId
-    embeddingModelId: embeddingModelId
     embeddingModelName: embeddingModelName
+    integratedVectorEmbeddingModelId: integratedVectorEmbeddingModelId
+    indexerEmbeddingModelId: indexerEmbeddingModelId
     azureOpenAIEndpoint: openAi.outputs.endpoint
   }
 }

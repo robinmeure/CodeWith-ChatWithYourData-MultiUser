@@ -8,8 +8,9 @@ param(
     [string] [Parameter(Mandatory=$true)] $dataSourceConnectionString,
     [string] [Parameter(Mandatory=$true)] $indexName,
     [string] [Parameter(Mandatory=$true)] $AzureOpenAIResourceUri,
-    [string] [Parameter(Mandatory=$true)] $embeddingDeploymentName,
-    [string] [Parameter(Mandatory=$true)] $embeddingModelName
+    [string] [Parameter(Mandatory=$true)] $indexerEmbeddingModelId,
+    [string] [Parameter(Mandatory=$true)] $embeddingModelName,
+    [string] [Parameter(Mandatory=$true)] $searchEmbeddingModelId
 )
 
 $DeploymentScriptOutputs = @{}
@@ -20,9 +21,10 @@ $placeholderMap = @{
     "{DATA_SOURCE_CONTAINER_NAME}" = $dataSourceContainerName
     "{INDEX_NAME}" = $indexName
     "{AZURE_OPENAI_RESOURCE_URI}" = $AzureOpenAIResourceUri
-    "{EMBEDDING_DEPLOYMENT_NAME}" = $embeddingDeploymentName
+    "{INDEXER_EMBEDDING_MODEL_ID}" = $indexerEmbeddingModelId
     "{EMBEDDING_MODEL_NAME}" = $embeddingModelName
     "{SEARCH_INSTANCE_NAME}" = $searchServiceName
+    "{SEARCH_EMBEDDING_MODEL_ID}" = $searchEmbeddingModelId
 }
 
 # Function to replace tokens and create the request body for the API call.
