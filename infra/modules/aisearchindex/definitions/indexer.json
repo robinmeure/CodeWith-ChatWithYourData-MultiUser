@@ -1,0 +1,18 @@
+{
+    "name": "{INDEX_NAME}-indexer",
+    "dataSourceName": "{INDEX_NAME}-datasource",
+    "skillsetName": "{INDEX_NAME}-skillset",
+    "targetIndexName": "{INDEX_NAME}",
+    "parameters": {
+        "configuration": {
+            "dataToExtract": "contentAndMetadata",
+            "parsingMode": "default"
+        }
+    },
+    "fieldMappings": [
+        {
+            "sourceFieldName": "metadata_storage_name",
+            "targetFieldName": "title"
+        }
+    ]
+}
