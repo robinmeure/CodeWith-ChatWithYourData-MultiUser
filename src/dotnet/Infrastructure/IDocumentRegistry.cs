@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Domain;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -8,4 +9,7 @@ namespace Infrastructure;
 
 public interface IDocumentRegistry
 {
+    Task<string> AddDocumentToThreadAsync(DocsPerThread docsPerThread);
+    Task<List<DocsPerThread>> GetDocsPerThread(string threadId);
+
 }

@@ -397,3 +397,6 @@ FodyWeavers.xsd
 # JetBrains Rider
 *.sln.iml
 /src/dotnet/DocUploadHelper/appsettings.json
+/src/dotnet/DocApi/appsettings.json
+/src/dotnet/DocApi/appsettings.Development.json
+/src/dotnet/DocUploadHelper/appsettings.Development.json

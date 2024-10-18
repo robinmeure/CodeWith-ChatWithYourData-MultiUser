@@ -1,5 +1,7 @@
 ﻿using Azure.Identity;
 using Azure.Storage.Blobs;
+using Azure.Storage.Blobs.Models;
+using Domain;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -17,7 +19,7 @@ namespace Infrastructure
             _blobServiceClient = client;
         }
 
-        public async Task<string> AddDocumentAsync(string document, string threadId, string folder)
+        public async Task<DocsPerThread> AddDocumentAsync(string userId, string document, string threadId, string folder)
         {
             var documentId = Guid.NewGuid().ToString();
             var blobContainerClient = _blobServiceClient.GetBlobContainerClient(folder);
@@ -36,8 +38,16 @@ namespace Infrastructure
             };
             blobClient.SetMetadata(metadata);
 
-           
-            return documentId;
+            // creating the document object to be returned so that the controller can store it in the cosmos db
+            DocsPerThread docsPerThread = new()
+            {
+                Id = documentId,
+                ThreadId = threadId,
+                DocumentName = documentName,
+                UserId = userId
+            };
+
+            return docsPerThread;
         }
 
         public Task DeleteDocumentAsync(string documentName, string folder)
@@ -50,9 +60,25 @@ namespace Infrastructure
             throw new NotImplementedException();
         }
 
-        public Task<IEnumerable<string>> GetDocumentsAsync(string threadId)
+        public async Task<IEnumerable<string>> GetDocumentsAsync(string threadId, string folder)
         {
-            throw new NotImplementedException();
+            BlobContainerClient containerClient = _blobServiceClient.GetBlobContainerClient(folder);
+            var results = new List<string>();
+
+            await foreach (BlobItem blob in containerClient.GetBlobsAsync())
+            {
+                var blobClient = containerClient.GetBlobClient(blob.Name);
+                var properties = await blobClient.GetPropertiesAsync();
+                var metadata = properties.Value.Metadata;
+
+                // Optionally, you can filter blobs based on metadata, e.g., by threadId
+                if (metadata.TryGetValue("threadId", out var blobThreadId) && blobThreadId == threadId)
+                {
+                    results.Add(blob.Name);
+                }
+            }
+
+            return results;
         }
 
         public Task UpdateDocumentAsync(string documentName, string documentUri)
