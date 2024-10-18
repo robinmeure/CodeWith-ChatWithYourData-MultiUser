@@ -11,4 +11,5 @@ public interface IDocumentRegistry
 {
     Task<string> AddDocumentToThreadAsync(DocsPerThread docsPerThread);
     Task<List<DocsPerThread>> GetDocsPerThread(string threadId);
+
 }

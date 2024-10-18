@@ -1,5 +1,8 @@
 
+using Azure;
 using Azure.Identity;
+using Azure.Search.Documents;
+using Azure.Search.Documents.Indexes;
 using Azure.Storage;
 using Infrastructure;
 using Microsoft.Azure.Cosmos;
@@ -50,9 +53,29 @@ namespace DocApi
                     return client;
                 });
             }
+            var searchConfig = builder.Configuration.GetSection("Search");
+            if (searchConfig != null)
+            { 
+                builder.Services.AddSingleton<SearchClient>(sp =>
+                {
+                    string searchServiceName = searchConfig["ServiceName"];
+                    string indexName = searchConfig["IndexName"];
+                    string apiKey = searchConfig["ApiKey"];
+                    Uri serviceUri = new Uri(searchConfig["EndPoint"]);
+                    return new SearchClient(serviceUri, indexName, new AzureKeyCredential(apiKey));
+                });
+                builder.Services.AddSingleton<SearchIndexClient>(sp =>
+                {
+                    string searchServiceName = searchConfig["ServiceName"];
+                    string apiKey = searchConfig["ApiKey"];
+                    Uri serviceUri = new Uri(searchConfig["EndPoint"]);
+                    return new SearchIndexClient(serviceUri, new AzureKeyCredential(apiKey));
+                });
+            }
 
             builder.Services.AddScoped<CosmosDocumentRegistry>();
             builder.Services.AddScoped<BlobDocumentStore>();
+            builder.Services.AddScoped<AISearchService>();
             builder.Services.AddControllers();
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();

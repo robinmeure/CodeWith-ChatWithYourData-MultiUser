@@ -28,14 +28,14 @@ namespace Infrastructure
         public async Task<string> AddDocumentToThreadAsync(DocsPerThread docsPerThread)
         {
             Database _database = await _cosmosClient.CreateDatabaseIfNotExistsAsync(_databaseName);
-            Container _container = await _database.CreateContainerIfNotExistsAsync(new ContainerProperties(_containerName, "/UserId"));
+            Container _container = await _database.CreateContainerIfNotExistsAsync(new ContainerProperties(_containerName, "/userId"));
 
             var response = await _container.CreateItemAsync(docsPerThread, new PartitionKey(docsPerThread.UserId));
             if (response.StatusCode != System.Net.HttpStatusCode.Created)
             {
                 throw new Exception("Failed to add document to Document Store");
             }
-            return response.Resource.id;
+            return response.Resource.Id;
         }
 
         public async Task<List<DocsPerThread>> GetDocsPerThread(string threadId)
@@ -44,7 +44,7 @@ namespace Infrastructure
             Container _container = _database.GetContainer(_containerName);
 
             List<DocsPerThread> documents = new List<DocsPerThread>();
-            string query = string.Format("SELECT * FROM c WHERE c.ThreadId = '{0}'", threadId);
+            string query = string.Format("SELECT * FROM c WHERE c.threadId = '{0}'", threadId);
             var queryDefinition = new QueryDefinition(query);
             var queryOptions = new QueryRequestOptions
             {

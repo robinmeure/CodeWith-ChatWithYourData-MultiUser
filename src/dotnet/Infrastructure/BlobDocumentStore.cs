@@ -41,7 +41,7 @@ namespace Infrastructure
             // creating the document object to be returned so that the controller can store it in the cosmos db
             DocsPerThread docsPerThread = new()
             {
-                id = documentId,
+                Id = documentId,
                 ThreadId = threadId,
                 DocumentName = documentName,
                 UserId = userId

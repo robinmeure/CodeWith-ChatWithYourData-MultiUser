@@ -14,16 +14,20 @@ namespace DocApi.Controllers
     {
         private readonly BlobDocumentStore _blobDocumentStore;
         private readonly CosmosDocumentRegistry _cosmosDocumentRegistry;
+        private readonly AISearchService _aisearchService;
         private readonly ILogger<DocumentController> _logger;
         private string _containerName = "documents";
 
         public DocumentController(
             ILogger<DocumentController> logger, 
             BlobDocumentStore blobDocumentStore, 
-            CosmosDocumentRegistry cosmosDocumentRegistry)
+            CosmosDocumentRegistry cosmosDocumentRegistry,
+            AISearchService aISearchService
+            )
         {
             _blobDocumentStore = blobDocumentStore;
             _cosmosDocumentRegistry = cosmosDocumentRegistry;
+            _aisearchService = aISearchService;
             _logger = logger;
         }
 
@@ -56,7 +60,7 @@ namespace DocApi.Controllers
             var result = await _cosmosDocumentRegistry.AddDocumentToThreadAsync(docsPerThread);
 
             // third step is to kick off the indexer
-            //todo
+            var chunks = await _aisearchService.IsChunkingComplete(docsPerThread);
 
             return result;
         }
