@@ -12,7 +12,7 @@ namespace Infrastructure;
 public interface IDocumentStore
 {
     Task<DocsPerThread> AddDocumentAsync(string userId, IFormFile document, string threadId, string folder);
-    Task DeleteDocumentAsync(string documentName, string folder);
+    Task<bool> DeleteDocumentAsync(string documentName, string folder);
     Task<bool> DocumentExistsAsync(string documentName, string folder);
     Task<IEnumerable<string>> GetDocumentsAsync(string threadId, string folder);
     Task UpdateDocumentAsync(string documentName, string documentUri);

@@ -38,15 +38,20 @@ var host = new HostBuilder()
         
         services.AddSingleton(sp =>
         {
-            string accountEndpoint = config["CosmosDbConnection__accountEndpoint"];
-
+            string accountEndpoint = config["CosmosDbConnection:accountEndpoint"];
+            string cosmosDBDatabase = config["CosmosDBDatabase"];
+            string cosmosDBContainer = config["CosmosDBContainer"];
+    
             // Create and configure CosmosClientOptions
             var cosmosClientOptions = new CosmosClientOptions
             {
                 ConnectionMode = ConnectionMode.Direct,
                 RequestTimeout = TimeSpan.FromSeconds(30)
             };
-            return new CosmosClient(accountEndpoint, azureCredential, cosmosClientOptions);
+
+            var client = new CosmosClient(accountEndpoint, azureCredential, cosmosClientOptions);
+            var database = client.GetDatabase(cosmosDBDatabase);
+            return database.GetContainer(cosmosDBContainer);
         });
       
 
