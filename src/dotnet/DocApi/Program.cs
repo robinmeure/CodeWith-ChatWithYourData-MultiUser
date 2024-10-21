@@ -28,7 +28,6 @@ namespace DocApi
                 var blobConfig = builder.Configuration.GetSection("Storage");
                 Uri serviceUri = new Uri(blobConfig["ServiceUri"]);
                 clientBuilder.AddBlobServiceClient(serviceUri);
-
                 clientBuilder.UseCredential(azureCredential);
             });
 

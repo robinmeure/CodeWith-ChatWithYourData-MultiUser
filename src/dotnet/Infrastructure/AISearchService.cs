@@ -59,32 +59,18 @@ namespace Infrastructure
             SearchResults<SearchDocument> response = await _searchClient.SearchAsync<SearchDocument>(null, searchOptions);
 
             // temporary list to store the documents that are found in the search index
-            List<DocsPerThread> fromSearch = new List<DocsPerThread>();
+            var fromSearch = new HashSet<string>();
             await foreach (SearchResult<SearchDocument> result in response.GetResultsAsync())
             {
-                fromSearch.Add(new DocsPerThread
-                {
-                    Id = result.Document["document_id"].ToString(),
-                    ThreadId = result.Document["thread_id"].ToString(),
-                    DocumentName = result.Document["file_name"].ToString(),
-                    UserId = "1234"
-                });
+                fromSearch.Add(result.Document["document_id"].ToString());
             }
 
-            List<DocsPerThread> returnSet = new List<DocsPerThread>();
-            // check if all the documents are found in the search index
-            docsPerThreads.ForEach(dpt =>
+            // Use LINQ to update the AvailableInSearchIndex property
+            var returnSet = docsPerThreads.Select(dpt =>
             {
-                if (!fromSearch.Any(fs => fs.Id == dpt.Id))
-                {
-                    dpt.AvailableInSearchIndex = false;
-                }
-                else
-                {
-                    dpt.AvailableInSearchIndex = true;
-                }
-                returnSet.Add(dpt);
-            });
+                dpt.AvailableInSearchIndex = fromSearch.Contains(dpt.Id);
+                return dpt;
+            }).ToList();
 
             return returnSet;
         }

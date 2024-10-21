@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Identity.Client;
 using System.Reflection.Metadata;
+using System.Xml.Linq;
 
 namespace DocApi.Controllers
 {
@@ -17,57 +18,46 @@ namespace DocApi.Controllers
         private readonly IDocumentRegistry _documentRegistry;
         private readonly ISearchService _searchService;
         private readonly ILogger<DocumentController> _logger;
-        private string _containerName = "documents";
+        private readonly IConfiguration _configuration;
+        private readonly string _containerName;
 
         public DocumentController(
             ILogger<DocumentController> logger,
             IDocumentStore blobDocumentStore,
             IDocumentRegistry cosmosDocumentRegistry,
-            ISearchService aISearchService
+            ISearchService aISearchService,
+            IConfiguration configuration
             )
         {
             _documentStore = blobDocumentStore;
             _documentRegistry = cosmosDocumentRegistry;
             _searchService = aISearchService;
+            _configuration = configuration;
             _logger = logger;
+
+            _containerName = _configuration.GetValue<string>("Storage:ContainerName") ?? "documents";
         }
 
         [HttpGet(Name = "GetMyDocuments")]
         public async Task<IEnumerable<DocsPerThread>> Get([FromRoute] string threadId)
         {
+            _logger.LogInformation("Fetching documents from CosmosDb for threadId : {0}", threadId);
+
             // fetch the documents from cosmos which belong to this thread
             var results = await _documentRegistry.GetDocsPerThread(threadId);
+
+            _logger.LogInformation("Comparing documents from Cosmos against Search for threadId : {0}", threadId);
 
             // check for the uploaded docs if they are chunked
             return await _searchService.IsChunkingComplete(results);
         }
-
-        // this is test code to upload a document, just grabbing a local file
-        //[HttpPost(Name = "Upload")]
-        //public async Task<string> UploadDocument(string? document, string userId, [FromRoute] string threadId)
-        //{
-        //    if (string.IsNullOrEmpty(document))
-        //        document = "C:\\Users\\rmeure\\downloads\\Brochure Elektrisch Rijden nieuw.pdf";
-
-        //    // first step is to upload the document to the blob storage
-        //    DocsPerThread docsPerThread = await _documentStore.AddDocumentAsync(userId, document, threadId, _containerName);
-        //    if (docsPerThread == null)
-        //        throw new Exception("File upload failed");
-
-        //    // second step is to add the document to the cosmos db
-        //    var result = await _documentRegistry.AddDocumentToThreadAsync(docsPerThread);
-
-        //    // tnird step is to kick off the indexer
-        //    var chunks = await _searchService.StartIndexing();
-
-        //    return result;
-        //}
 
         [HttpPost(Name = "Upload")]
         public async Task<IActionResult> UploadDocuments(List<IFormFile> documents, string userId, [FromRoute] string threadId)
         {
             if (documents == null || !documents.Any())
             {
+                _logger.LogWarning("No files uploaded.");
                 return BadRequest("No files uploaded.");
             }
 
@@ -77,15 +67,19 @@ namespace DocApi.Controllers
             {
                 try
                 {
+                    _logger.LogInformation("Uploading document: {0}", document.FileName);
+
                     // First step is to upload the document to the blob storage
                     DocsPerThread docsPerThread = await _documentStore.AddDocumentAsync(userId, document, threadId, _containerName);
                     if (docsPerThread == null)
                     {
                         throw new Exception("File upload failed");
                     }
+                    _logger.LogInformation("Document uploaded to blob storage: {0}", document.FileName);
 
                     // Second step is to add the document to the cosmos db
                     var result = await _documentRegistry.AddDocumentToThreadAsync(docsPerThread);
+                    _logger.LogInformation("Document added to Cosmos DB: {0}", document.FileName);
 
                     uploadResults.Add(result);
                 }
@@ -97,7 +91,10 @@ namespace DocApi.Controllers
             }
 
             // Third step is to kick off the indexer
+            _logger.LogInformation("Starting indexing process.");
             var chunks = await _searchService.StartIndexing();
+            _logger.LogInformation("Indexing process started.");
+
             return Ok(uploadResults);
         }
     }
