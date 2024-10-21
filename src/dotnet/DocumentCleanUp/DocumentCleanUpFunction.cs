@@ -13,17 +13,23 @@ public class DocumentCleanUpFunction
     private readonly ILogger _logger;
     private IConfiguration _config;
     private IDocumentStore _documentStore;
+    private IDocumentRegistry _documentRegistry;
 
 
-    public DocumentCleanUpFunction(ILoggerFactory loggerFactory, IConfiguration config, IDocumentStore documentStore)
+    public DocumentCleanUpFunction(
+        ILoggerFactory loggerFactory, 
+        IConfiguration config, 
+        IDocumentStore documentStore,
+        IDocumentRegistry documentRegistry)
     {
         _logger = loggerFactory.CreateLogger<DocumentCleanUpFunction>();
         _config = config;
         _documentStore = documentStore;
+        _documentRegistry = documentRegistry;
     }
 
     [Function("DocumentCleanUp")]
-    public void Run([CosmosDBTrigger(
+    public async Task Run([CosmosDBTrigger(
         databaseName: "%CosmosDBDatabase%",
         containerName: "%CosmosDBContainer%",
         Connection = "CosmosDbConnection",
@@ -38,9 +44,11 @@ public class DocumentCleanUpFunction
             {
                 _logger.LogInformation($"Document {doc.DocumentName} is marked for deletion. Deleting...");
                 // Delete the document from storage
-                _documentStore.DeleteDocumentAsync(doc.DocumentName, _config["StorageContainerName"]);
-
-                // Delete the document from the Cosmos DB container
+                if (await _documentStore.DeleteDocumentAsync(doc.Id, _config["StorageContainerName"]))
+                {
+                    // Delete the document from the Cosmos DB container
+                    await _documentRegistry.RemoveDocumentFromThreadAsync(doc);
+                }
                 continue;
 
             }

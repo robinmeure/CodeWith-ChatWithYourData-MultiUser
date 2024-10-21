@@ -9,6 +9,7 @@ using Infrastructure;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Azure;
 using System.Runtime.CompilerServices;
+using Microsoft.Extensions.Configuration.EnvironmentVariables;
 
 namespace DocApi
 {
@@ -37,6 +38,8 @@ namespace DocApi
                 builder.Services.AddSingleton(sp =>
                 {
                     string accountEndpoint = cosmosConfig["AccountEndpoint"];
+                    string databaseName = cosmosConfig["DatabaseName"];
+                    string containerName = cosmosConfig["ContainerName"];
 
                     // Create and configure CosmosClientOptions
                     var cosmosClientOptions = new CosmosClientOptions
@@ -44,7 +47,9 @@ namespace DocApi
                         ConnectionMode = ConnectionMode.Direct,
                         RequestTimeout = TimeSpan.FromSeconds(30)
                     };
-                    return new CosmosClient(accountEndpoint, azureCredential, cosmosClientOptions);
+                    var client = new CosmosClient(accountEndpoint, azureCredential, cosmosClientOptions);
+                    var database = client.GetDatabase(databaseName);
+                    return database.GetContainer(containerName);
                 });
             }
 

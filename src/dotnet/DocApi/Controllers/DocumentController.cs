@@ -2,6 +2,8 @@ using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Domain;
 using Infrastructure;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Identity.Client;
@@ -10,6 +12,7 @@ using System.Xml.Linq;
 
 namespace DocApi.Controllers
 {
+    [Authorize(JwtBearerDefaults.AuthenticationScheme)]
     [ApiController]
     [Route("/chats/{threadId}/[controller]")]
     public class DocumentController : ControllerBase
@@ -21,8 +24,6 @@ namespace DocApi.Controllers
         private readonly IConfiguration _configuration;
         private readonly string _containerName;
         private readonly HashSet<string> _blockedFileExtensions;
-
-
 
         public DocumentController(
             ILogger<DocumentController> logger,
@@ -120,7 +121,7 @@ namespace DocApi.Controllers
         }
 
         [HttpPost("delete/{documentId}", Name = "DeleteDocumentFromThread")]
-        public async Task<IActionResult> DeteleDocumentFromThread([FromRoute] string threadId, string documentId)
+        public async Task<IActionResult> RemoveDocumentAsync([FromRoute] string threadId, string documentId)
         {
             _logger.LogInformation("Fetching documents from CosmosDb for threadId {0} and documentId {1}", threadId, documentId);
 
@@ -144,7 +145,7 @@ namespace DocApi.Controllers
         }
 
         [HttpPost("delete", Name = "DeleteDocument")]
-        public async Task<IActionResult> DeteleDocumentsFromThread([FromRoute] string threadId)
+        public async Task<IActionResult> RemoveDocumentFromThreadAsync([FromRoute] string threadId)
         {
             _logger.LogInformation("Fetching documents from CosmosDb for threadId : {0}", threadId);
 
