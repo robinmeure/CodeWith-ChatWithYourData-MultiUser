@@ -59,7 +59,15 @@ namespace DocApi
                 builder.Services.AddSingleton(sp => new SearchIndexerClient(serviceUri, azureCredential));
             }
 
-            builder.Services.AddScoped<IDocumentRegistry, CosmosDocumentRegistry>();
+            // Register CosmosDocumentRegistry with parameters
+            builder.Services.AddScoped<IDocumentRegistry>(sp =>
+            {
+                var cosmosClient = sp.GetRequiredService<CosmosClient>();
+                string databaseName = cosmosConfig["DatabaseName"];
+                string containerName = cosmosConfig["ContainerName"];
+                return new CosmosDocumentRegistry(cosmosClient, databaseName, containerName);
+            });
+
             builder.Services.AddScoped<IDocumentStore, BlobDocumentStore>();
             builder.Services.AddScoped<ISearchService, AISearchService>();
             builder.Services.AddControllers();

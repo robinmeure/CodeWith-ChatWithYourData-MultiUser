@@ -17,18 +17,22 @@ namespace Infrastructure
     public class CosmosDocumentRegistry : IDocumentRegistry
     {
         private CosmosClient _cosmosClient;
-        private readonly string _databaseName = "history";
-        private readonly string _containerName = "documentsperthread";
+        private readonly Container _container;
 
-        public CosmosDocumentRegistry(CosmosClient client) 
+        //private readonly string _databaseName = "history";
+        //private readonly string _containerName = "documentsperthread";
+
+        public CosmosDocumentRegistry(CosmosClient client, string databaseName, string containerName) 
         {
             _cosmosClient = client;
+            _container = _cosmosClient.GetContainer(databaseName, containerName);
+
         }
 
         public async Task<string> AddDocumentToThreadAsync(DocsPerThread docsPerThread)
         {
-            Database _database = await _cosmosClient.CreateDatabaseIfNotExistsAsync(_databaseName);
-            Container _container = await _database.CreateContainerIfNotExistsAsync(new ContainerProperties(_containerName, "/userId"));
+           // Database _database = await _cosmosClient.CreateDatabaseIfNotExistsAsync(_databaseName);
+           // Container _container = await _database.CreateContainerIfNotExistsAsync(new ContainerProperties(_containerName, "/userId"));
 
             var response = await _container.CreateItemAsync(docsPerThread, new PartitionKey(docsPerThread.UserId));
             if (response.StatusCode != System.Net.HttpStatusCode.Created)
@@ -38,10 +42,10 @@ namespace Infrastructure
             return response.Resource.Id;
         }
 
-        public async Task<List<DocsPerThread>> GetDocsPerThread(string threadId)
+        public async Task<List<DocsPerThread>> GetDocsPerThreadAsync(string threadId)
         {
-            Database _database = await _cosmosClient.CreateDatabaseIfNotExistsAsync(_databaseName);
-            Container _container = _database.GetContainer(_containerName);
+          //  Database _database = await _cosmosClient.CreateDatabaseIfNotExistsAsync(_databaseName);
+          //  Container _container = _database.GetContainer(_containerName);
 
             List<DocsPerThread> documents = new List<DocsPerThread>();
             string query = string.Format("SELECT * FROM c WHERE c.threadId = '{0}'", threadId);
@@ -64,6 +68,30 @@ namespace Infrastructure
             }
 
             return documents;
+        }
+
+        public async Task<bool> RemoveDocumentFromThreadAsync(List<DocsPerThread> documents)
+        {
+          //  Database _database = await _cosmosClient.CreateDatabaseIfNotExistsAsync(_databaseName);
+          //  Container _container = _database.GetContainer(_containerName);
+            
+            foreach (var document in documents)
+            { 
+                await _container.UpsertItemAsync(document);
+            }
+
+            return true;
+        }
+
+        public async Task<bool> RemoveDocumentAsync(DocsPerThread document)
+        {
+          //  Database _database = await _cosmosClient.CreateDatabaseIfNotExistsAsync(_databaseName);
+          //  Container _container = _database.GetContainer(_containerName);
+
+            var updatedDocument = await _container.UpsertItemAsync(document);
+            if (updatedDocument != null)
+                return true;
+            return false;
         }
     }
 }

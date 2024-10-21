@@ -10,6 +10,8 @@ namespace Infrastructure;
 public interface IDocumentRegistry
 {
     Task<string> AddDocumentToThreadAsync(DocsPerThread docsPerThread);
-    Task<List<DocsPerThread>> GetDocsPerThread(string threadId);
+    Task<List<DocsPerThread>> GetDocsPerThreadAsync(string threadId);
+    Task<bool> RemoveDocumentFromThreadAsync(List<DocsPerThread> documents);
+    Task<bool> RemoveDocumentAsync(DocsPerThread document);
 
 }
