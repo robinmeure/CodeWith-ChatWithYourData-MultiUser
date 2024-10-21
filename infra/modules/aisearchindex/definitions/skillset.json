@@ -1,0 +1,87 @@
+{
+    "name": "{INDEX_NAME}-skillset",
+    "skills": [
+        {
+            "@odata.type": "#Microsoft.Skills.Text.SplitSkill",
+            "name": "Chunk documents",
+            "description": "Split skill to chunk documents",
+            "context": "/document",
+            "defaultLanguageCode": "en",
+            "textSplitMode": "pages",
+            "maximumPageLength": 2000,
+            "pageOverlapLength": 500,
+            "maximumPagesToTake": 0,
+            "inputs": [
+                {
+                    "name": "text",
+                    "source": "/document/content"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "textItems",
+                    "targetName": "pages"
+                }
+            ]
+        },
+        {
+            "@odata.type": "#Microsoft.Skills.Text.AzureOpenAIEmbeddingSkill",
+            "name": "Create embeddings",
+            "context": "/document/pages/*",
+            "resourceUri": "{AZURE_OPENAI_RESOURCE_URI}",
+            "deploymentId": "{INDEXER_EMBEDDING_MODEL_ID}",
+            "dimensions": 1536,
+            "modelName": "{EMBEDDING_MODEL_NAME}",
+            "inputs": [
+                {
+                    "name": "text",
+                    "source": "/document/pages/*"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "embedding",
+                    "targetName": "text_vector"
+                }
+            ]
+        }
+    ],
+    "indexProjections": {
+        "selectors": [
+            {
+                "targetIndexName": "{INDEX_NAME}",
+                "parentKeyFieldName": "parent_id",
+                "sourceContext": "/document/pages/*",
+                "mappings": [
+                    {
+                        "name": "content_vector",
+                        "source": "/document/pages/*/text_vector"
+                    },
+                    {
+                        "name": "content",
+                        "source": "/document/pages/*"
+                    },
+                    {
+                        "name": "title",
+                        "source": "/document/title"
+                    },
+                    {
+                        "name": "thread_id",
+                        "source": "/document/threadId"
+                    },
+                    {
+                        "name": "file_name",
+                        "source": "/document/originalFilename"
+                    },
+                    {
+                        "name": "document_id",
+                        "source": "/document/documentId"
+                    }
+                ]
+            }
+        ],
+        "parameters": {
+            "projectionMode": "skipIndexingParentDocuments"
+        }
+    }
+}

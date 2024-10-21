@@ -400,3 +400,4 @@ FodyWeavers.xsd
 /src/dotnet/DocApi/appsettings.json
 /src/dotnet/DocApi/appsettings.Development.json
 /src/dotnet/DocUploadHelper/appsettings.Development.json
+/src/dotnet/DocumentCleanUp/local.settings.json
