@@ -1,10 +1,10 @@
 ﻿using Azure.Identity;
 
-namespace DocApi.Helpers
+namespace Infrastructure.Helpers
 {
     public static class DefaultCredentialOptions
     {
-        private static DefaultAzureCredentialOptions GetDefaultAzureCredentialOptionsImpl(string? clientId, string? tenantId, IWebHostEnvironment environment)
+        private static DefaultAzureCredentialOptions GetDefaultAzureCredentialOptionsImpl(string? clientId, string? tenantId, string environmentName)
         {
 
             DefaultAzureCredentialOptions credentialOptions = new()
@@ -43,7 +43,7 @@ namespace DocApi.Helpers
             }
 
 
-            if (environment.EnvironmentName == "Development")
+            if (environmentName == "Development")
             {
                 credentialOptions.ExcludeManagedIdentityCredential = true;
                 credentialOptions.ExcludeWorkloadIdentityCredential = true;
@@ -55,19 +55,19 @@ namespace DocApi.Helpers
             return credentialOptions;
         }
 
-        public static DefaultAzureCredentialOptions GetDefaultAzureCredentialOptions(IWebHostEnvironment environment)
+        public static DefaultAzureCredentialOptions GetDefaultAzureCredentialOptions(string environmentName)
         {
-            return GetDefaultAzureCredentialOptionsImpl(null, null, environment);
+            return GetDefaultAzureCredentialOptionsImpl(null, null, environmentName);
         }
 
-        public static DefaultAzureCredentialOptions GetDefaultAzureCredentialOptions(string clientId, IWebHostEnvironment environment)
+        public static DefaultAzureCredentialOptions GetDefaultAzureCredentialOptions(string clientId, string environmentName)
         {
-            return GetDefaultAzureCredentialOptionsImpl(clientId, null, environment);
+            return GetDefaultAzureCredentialOptionsImpl(clientId, null, environmentName);
         }
 
-        public static DefaultAzureCredentialOptions GetDefaultAzureCredentialOptions(string clientId, string tenantId, IWebHostEnvironment environment)
+        public static DefaultAzureCredentialOptions GetDefaultAzureCredentialOptions(string clientId, string tenantId, string environmentName)
         {
-            return GetDefaultAzureCredentialOptionsImpl(clientId, tenantId, environment);
+            return GetDefaultAzureCredentialOptionsImpl(clientId, tenantId, environmentName);
         }
     }
 }
