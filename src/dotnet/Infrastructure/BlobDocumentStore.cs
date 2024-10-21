@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection.Metadata;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
@@ -51,9 +52,11 @@ namespace Infrastructure
             return docsPerThread;
         }
 
-        public Task DeleteDocumentAsync(string documentName, string folder)
+        public async Task DeleteDocumentAsync(string documentName, string folder)
         {
-            throw new NotImplementedException();
+            var blobContainerClient = _blobServiceClient.GetBlobContainerClient(folder);
+            var blobClient = blobContainerClient.GetBlobClient(documentName);
+            blobClient.DeleteIfExists();
         }
 
         public Task<bool> DocumentExistsAsync(string documentName, string folder)

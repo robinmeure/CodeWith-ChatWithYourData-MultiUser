@@ -4,7 +4,7 @@ using Azure.Identity;
 using Azure.Search.Documents;
 using Azure.Search.Documents.Indexes;
 using Azure.Storage;
-using DocApi.Helpers;
+using Infrastructure.Helpers;
 using Infrastructure;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Azure;
@@ -18,7 +18,7 @@ namespace DocApi
         {
             var builder = WebApplication.CreateBuilder(args);
             DefaultAzureCredentialOptions azureCredentialOptions =
-            DefaultCredentialOptions.GetDefaultAzureCredentialOptions(builder.Environment);
+            DefaultCredentialOptions.GetDefaultAzureCredentialOptions(builder.Environment.EnvironmentName);
 
             var azureCredential = new DefaultAzureCredential(azureCredentialOptions);
             // Add services to the container.
