@@ -24,7 +24,7 @@ export const useChatDocuments = (chatId: string | undefined) => {
         }
     }, [chatId, documentData]);
 
-    const addMutation = useMutation({
+    const { mutateAsync: addDocuments} = useMutation({
         mutationFn: documentService.addDocumentsAsync,
         onError: () => {
             console.log('Failed to upload a document.');
@@ -34,7 +34,7 @@ export const useChatDocuments = (chatId: string | undefined) => {
         }
     });
 
-    const deleteMutation = useMutation({
+    const { mutateAsync: deleteDocument } = useMutation({
         mutationFn: documentService.deleteDocumentAsync,
         onError: () => {
             console.log('Failed to delete a document.');
@@ -43,14 +43,6 @@ export const useChatDocuments = (chatId: string | undefined) => {
             queryClient.invalidateQueries({ queryKey: ['documents', chatId] });
         }
     });
-
-    const addDocuments = async (chatId: string, documents: File[]) => {
-        addMutation.mutate({chatId, documents});
-    };
-
-    const deleteDocument = async (documentId: string) => {
-        deleteMutation.mutate(documentId);
-    };
 
     return {
         documentsPending,

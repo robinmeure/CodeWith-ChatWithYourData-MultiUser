@@ -39,8 +39,8 @@ const useClasses = makeStyles({
 });
 
 
-type documentUploadButtonProps = { 
-    uploadDocuments: (chatId: string, documents: File[]) => Promise<void>;
+type documentUploadButtonProps = {
+    uploadDocuments: ({ chatId, documents }: { chatId: string; documents: File[]; }) => Promise<boolean>;
     chatId: string | undefined;
 }
 
@@ -78,9 +78,9 @@ export function DocumentUploader({ uploadDocuments, chatId }: documentUploadButt
     };
 
     const handleUploadFiles = async () => {
-        if(chatId){
+        if (chatId) {
             setUploading(true);
-            await uploadDocuments(chatId, files);
+            await uploadDocuments({ chatId, documents: files });
             setFiles([]);
             setUploading(false);
             setShowPopUp(false);
@@ -105,7 +105,7 @@ export function DocumentUploader({ uploadDocuments, chatId }: documentUploadButt
                                 <TableHeader>
                                     <TableRow>
                                         <TableHeaderCell key={'filename'} className={classes.headerText}>
-                                                File name
+                                            File name
                                         </TableHeaderCell>
                                     </TableRow>
                                 </TableHeader>

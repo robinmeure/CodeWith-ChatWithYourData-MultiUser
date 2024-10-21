@@ -24,7 +24,7 @@ const columns = [
 
 type documentGridProps = { 
       documents?: IDocument[];
-      deleteDocument: (documentId: string) => Promise<void>
+      deleteDocument: (documentId: string) => Promise<boolean>
 }
 
 export function DocumentGrid({ documents, deleteDocument } : documentGridProps) {

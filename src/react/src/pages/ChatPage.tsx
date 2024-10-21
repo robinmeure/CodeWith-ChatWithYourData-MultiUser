@@ -19,7 +19,7 @@ export function ChatPage() {
 
     return (
         <div className={classes.container}>
-            <Chatlist chats={chats.chats} selectedChatId={chats.selectedChatId} selectChat={chats.selectChat} addChat={chats.addChat} deleteChat={chats.deleteChat} />
+            <Chatlist chats={chats.chats} selectedChatId={chats.selectedChatId} selectChat={chats.selectChat} addChat={chats.addChat} deleteChat={chats.deleteChat} loading={chats.isPending} />
             <ChatInterface selectedChatId={chats.selectedChatId} />
         </div>
     );

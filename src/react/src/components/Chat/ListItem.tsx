@@ -12,7 +12,7 @@ const useClasses = makeStyles({
         justifyContent: 'space-between',
         alignItems: 'center',
         marginTop: tokens.spacingVerticalS,
-        padding: tokens.spacingHorizontalS,
+        padding: tokens.spacingHorizontalXS,
         borderRadius: tokens.borderRadiusLarge,
         ":hover": {
             backgroundColor: tokens.colorNeutralBackground2Hover
@@ -23,7 +23,7 @@ const useClasses = makeStyles({
         color: tokens.colorNeutralForeground1,
         whiteSpace: 'nowrap',
         overflow: 'hidden',
-        width: '200px',
+        width: '170px',
         textOverflow: 'ellipsis',
     },
     selected: {
@@ -36,7 +36,7 @@ type listItemType = {
     item: IChat,
     isSelected: boolean,
     selectChat: (chatId?: string) => void,
-    deleteChat: (chatId: string) => Promise<void>
+    deleteChat: (chatId: string) => Promise<boolean>
 }
 
 export function ListItem({ item, isSelected, selectChat, deleteChat }: listItemType) {
