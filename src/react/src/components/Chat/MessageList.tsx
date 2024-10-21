@@ -2,6 +2,7 @@ import { makeStyles } from '@fluentui/react-components';
 import { Message } from './Message';
 import { useEffect, useRef } from 'react';
 import { IChatMessage } from '../../models/ChatMessage';
+import { ChatSkeleton } from '../Loading/ChatSkeleton';
 
 const useClasses = makeStyles({
     scrollContainer: {
@@ -12,7 +13,7 @@ const useClasses = makeStyles({
         overflowX: 'hidden',
         flexDirection: 'column',
         '&::-webkit-scrollbar': {
-           display: 'none'
+            display: 'none'
         },
     },
     messageContainer: {
@@ -23,10 +24,11 @@ const useClasses = makeStyles({
 });
 
 type messageListType = {
-    messages: IChatMessage[]
+    messages: IChatMessage[],
+    loading: boolean
 }
 
-export function MessageList({ messages }: messageListType) {
+export function MessageList({ messages, loading }: messageListType) {
 
     const classes = useClasses();
     const containerRef = useRef<HTMLDivElement>(null);
@@ -40,10 +42,13 @@ export function MessageList({ messages }: messageListType) {
     return (
         <div ref={containerRef} className={classes.scrollContainer}>
             <div className={classes.messageContainer}>
-                {messages &&
-                    messages.map((item: { role: string, content: string }) => {
-                        return <Message message={item} />
-                    })}
+                {loading ? (<ChatSkeleton />) : (
+                    <>
+                        {messages &&
+                            messages.map((item: { role: string, content: string }) => {
+                                return <Message message={item} />
+                            })}</>
+                )}
             </div>
         </div>
     );

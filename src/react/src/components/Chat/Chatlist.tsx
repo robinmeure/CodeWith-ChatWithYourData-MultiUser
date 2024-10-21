@@ -1,7 +1,8 @@
-import { Text, Button, makeStyles, tokens, Skeleton, SkeletonItem } from '@fluentui/react-components';
+import { Text, Button, makeStyles, tokens } from '@fluentui/react-components';
 import { ListItem } from './ListItem';
 import { Add24Regular, Home24Regular } from '@fluentui/react-icons';
 import { IChat } from '../../models/Chat';
+import { ListSkeleton } from '../Loading/ListSkeleton';
 
 const useClasses = makeStyles({
     root: {
@@ -32,8 +33,8 @@ type chatListType = {
     chats: IChat[] | undefined,
     selectedChatId: string | undefined,
     selectChat: (chatId?: string) => void,
-    addChat: (userId: string) => Promise<void>,
-    deleteChat: (chatId: string) => Promise<void>,
+    addChat: (userId: string) => Promise<IChat>,
+    deleteChat: (chatId: string) => Promise<boolean>,
     loading: boolean
 }
 
@@ -49,9 +50,7 @@ export function Chatlist({ chats, selectedChatId, selectChat, addChat, deleteCha
             <Text className={classes.listHeaderText}>My chats</Text>
 
             {loading && (
-                <Skeleton aria-label="Loading Content">
-                    <SkeletonItem size={64} shape="rectangle" />
-                </Skeleton>
+                <ListSkeleton/>
             )}
             {/* Chat list */}
             {(chats && !loading) && chats.map((item) => {

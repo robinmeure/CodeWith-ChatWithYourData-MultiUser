@@ -14,7 +14,7 @@ export const useChats = () => {
         queryFn: async () => chatService.getChatsAsync()
     });
 
-    const addMutation = useMutation({
+    const { mutateAsync: addChat} = useMutation({
         mutationFn: chatService.createChatAsync,
         onError: () => {
             console.log('Failed to create a chat.');
@@ -25,7 +25,7 @@ export const useChats = () => {
         }
     });
 
-    const deleteMutation = useMutation({
+    const { mutateAsync: deleteChat} = useMutation({
         mutationFn: chatService.deleteChatAsync,
         onError: () => {
             console.log('Failed to delete chat.');
@@ -49,14 +49,6 @@ export const useChats = () => {
             setSelectedChatId(undefined);
         }
     };
-
-    const addChat = async (userId: string) => {
-        addMutation.mutate(userId);
-    };
-
-    const deleteChat = async(chatId: string) => {
-        deleteMutation.mutate(chatId);
-    }
 
     return {
         isPending,
