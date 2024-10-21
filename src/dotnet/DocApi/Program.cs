@@ -67,6 +67,23 @@ namespace DocApi
             builder.Services.AddScoped<IDocumentRegistry, CosmosDocumentRegistry>();
             builder.Services.AddScoped<IDocumentStore, BlobDocumentStore>();
             builder.Services.AddScoped<ISearchService, AISearchService>();
+            builder.Services.AddScoped<IThreadRegistry>(sp =>
+            {
+                string accountEndpoint = cosmosConfig["AccountEndpoint"];
+                string databaseName = cosmosConfig["DatabaseName"];
+                string containerName = cosmosConfig["ThreadHistoryContainerName"];
+
+                // Create and configure CosmosClientOptions
+                var cosmosClientOptions = new CosmosClientOptions
+                {
+                    ConnectionMode = ConnectionMode.Direct,
+                    RequestTimeout = TimeSpan.FromSeconds(30)
+                };
+                var client = new CosmosClient(accountEndpoint, azureCredential, cosmosClientOptions);
+                var database = client.GetDatabase(databaseName);
+                var container = database.GetContainer(containerName);
+                return new CosmosThreadRegistry(container);
+            });
             builder.Services.AddControllers();
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();
