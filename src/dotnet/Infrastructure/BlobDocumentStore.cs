@@ -17,7 +17,8 @@ namespace Infrastructure
     {
         private BlobServiceClient _blobServiceClient;
 
-        public BlobDocumentStore(BlobServiceClient client) {
+        public BlobDocumentStore(BlobServiceClient client)
+        {
             _blobServiceClient = client;
         }
 
@@ -33,7 +34,7 @@ namespace Infrastructure
 
             //set meta data
             var metadata = new Dictionary<string, string>
-            {               
+            {
                 { "threadId", threadId },
                 { "documentId", documentId },
                 { "originalFilename", documentName }
@@ -52,11 +53,12 @@ namespace Infrastructure
             return docsPerThread;
         }
 
-        public async Task DeleteDocumentAsync(string documentName, string folder)
+        public async Task<bool> DeleteDocumentAsync(string documentName, string folder)
         {
             var blobContainerClient = _blobServiceClient.GetBlobContainerClient(folder);
             var blobClient = blobContainerClient.GetBlobClient(documentName);
-            blobClient.DeleteIfExists();
+            var result = await blobClient.DeleteIfExistsAsync();
+            return result;
         }
 
         public Task<bool> DocumentExistsAsync(string documentName, string folder)

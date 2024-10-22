@@ -12,7 +12,6 @@ using System.Xml.Linq;
 
 namespace DocApi.Controllers
 {
-    [Authorize(JwtBearerDefaults.AuthenticationScheme)]
     [ApiController]
     [Route("/chats/{threadId}/[controller]")]
     public class DocumentController : ControllerBase
@@ -156,7 +155,7 @@ namespace DocApi.Controllers
             if (updatedResults != null && updatedResults.Any())
             {
                 _logger.LogInformation("Soft deleting from CosmosDb for threadId {0}", threadId);
-                await _documentRegistry.RemoveDocumentFromThreadAsync(updatedResults);
+                await _documentRegistry.RemoveDocumentAsync(updatedResults.First());
                 return Ok();
             }
 
