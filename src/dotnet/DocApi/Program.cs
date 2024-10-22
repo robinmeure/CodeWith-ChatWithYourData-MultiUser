@@ -10,6 +10,8 @@ using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Azure;
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Configuration.EnvironmentVariables;
+using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.ChatCompletion;
 
 namespace DocApi
 {
@@ -32,6 +34,7 @@ namespace DocApi
                 clientBuilder.UseCredential(azureCredential);
             });
 
+            
             var cosmosConfig = builder.Configuration.GetSection("Cosmos");
             if (cosmosConfig != null)
             {
@@ -62,6 +65,21 @@ namespace DocApi
                 builder.Services.AddSingleton(sp => new SearchClient(serviceUri, indexName, azureCredential));
                 builder.Services.AddSingleton(sp => new SearchIndexClient(serviceUri, azureCredential));
                 builder.Services.AddSingleton(sp => new SearchIndexerClient(serviceUri, azureCredential));
+            }
+
+            // Semantic kernel.
+            var openAIConfig = builder.Configuration.GetSection("OpenAI");
+            if(openAIConfig != null)
+            {
+                string endpoint = openAIConfig["EndPoint"];
+                string completionModel = openAIConfig["CompletionModel"];
+                string key = openAIConfig["Key"];
+                
+                var kernelBuilder = Kernel.CreateBuilder();
+                kernelBuilder.AddAzureOpenAIChatCompletion(completionModel, endpoint, key);
+                var kernel = kernelBuilder.Build();
+                builder.Services.AddSingleton(sp => kernel);
+                builder.Services.AddSingleton(sp => kernel.GetRequiredService<IChatCompletionService>());
             }
 
             builder.Services.AddScoped<IDocumentRegistry, CosmosDocumentRegistry>();

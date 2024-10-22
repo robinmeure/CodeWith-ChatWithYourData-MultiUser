@@ -25,7 +25,7 @@ namespace Infrastructure
         {
 
             List<Domain.Thread> threads = new List<Domain.Thread>();
-            string query = string.Format("SELECT * FROM c WHERE c.userId = '{0}' AND c.type = 'CHAT_THREAD'", userId);
+            string query = string.Format("SELECT * FROM c WHERE c.userId = '{0}' AND c.type = 'CHAT_THREAD' AND c.deleted = false", userId);
             var queryDefinition = new QueryDefinition(query);
             var queryOptions = new QueryRequestOptions
             {
@@ -47,11 +47,19 @@ namespace Infrastructure
             return threads;
         }
 
-        public async Task<bool> DeleteThreadAsync(string threadId)
+        public async Task<bool> DeleteThreadAsync(string userId, string threadId)
         {
+            Domain.Thread thread = await _container.ReadItemAsync<Domain.Thread>(threadId, new PartitionKey(userId));
+            if (thread == null)
+            {
+                return false;
+            }
 
-            var response = await _container.DeleteItemAsync<Domain.Thread>(threadId, new PartitionKey(threadId));
-            if (response.StatusCode != System.Net.HttpStatusCode.NoContent)
+            thread.Deleted = true;
+
+            var response = await _container.ReplaceItemAsync<Domain.Thread>(thread, threadId, new PartitionKey(userId));
+
+            if (response.StatusCode != System.Net.HttpStatusCode.OK)
             {
                 return false;
             }
@@ -84,11 +92,11 @@ namespace Infrastructure
 
         }
 
-        public async Task<List<ThreadMessage>> GetMessagesAsync(string threadId)
+        public async Task<List<ThreadMessage>> GetMessagesAsync(string userId, string threadId)
         {
 
             List<ThreadMessage> messages = new List<ThreadMessage>();
-            string query = string.Format("SELECT * FROM m WHERE m.threadId = '{0}' ORDER BY m._ts DESC", threadId);
+            string query = string.Format("SELECT * FROM m WHERE m.threadId = '{0}' ORDER BY m._ts ASC", threadId);
             var queryDefinition = new QueryDefinition(query);
             var queryOptions = new QueryRequestOptions
             {
@@ -110,7 +118,7 @@ namespace Infrastructure
             return messages;
         }
 
-        public async Task<bool> PostMessageAsync(string userId, string threadId, string message)
+        public async Task<bool> PostMessageAsync(string userId, string threadId, string message, string role)
         {
             string messageId = Guid.NewGuid().ToString();
             DateTime now = DateTime.Now;
@@ -122,7 +130,7 @@ namespace Infrastructure
                 Type = "CHAT_MESSAGE",
                 ThreadId = threadId,
                 UserId = userId,
-                Role = "user",
+                Role = role,
                 Content = message
             };
 

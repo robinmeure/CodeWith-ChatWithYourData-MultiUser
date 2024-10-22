@@ -12,9 +12,9 @@ public interface IThreadRegistry
 {
     Task<List<Domain.Thread>> GetThreadsAsync(string userId);
     Task<Domain.Thread> CreateThreadAsync(string userId);
-    Task<bool> DeleteThreadAsync(string threadId);
-    Task<List<ThreadMessage>> GetMessagesAsync(string threadId);
-    Task<bool> PostMessageAsync(string userId, string threadId, string message);
+    Task<bool> DeleteThreadAsync(string userId, string threadId);
+    Task<List<ThreadMessage>> GetMessagesAsync(string userId, string threadId);
+    Task<bool> PostMessageAsync(string userId, string threadId, string message, string role);
 }
 
 
