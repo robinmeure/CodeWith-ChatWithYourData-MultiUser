@@ -17,7 +17,8 @@ namespace Infrastructure
     {
         private BlobServiceClient _blobServiceClient;
 
-        public BlobDocumentStore(BlobServiceClient client) {
+        public BlobDocumentStore(BlobServiceClient client)
+        {
             _blobServiceClient = client;
         }
 
@@ -33,7 +34,7 @@ namespace Infrastructure
 
             //set meta data
             var metadata = new Dictionary<string, string>
-            {               
+            {
                 { "threadId", threadId },
                 { "documentId", documentId },
                 { "originalFilename", documentName }

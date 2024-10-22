@@ -2,6 +2,8 @@ using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Domain;
 using Infrastructure;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Identity.Client;
@@ -20,6 +22,7 @@ namespace DocApi.Controllers
         private readonly ILogger<DocumentController> _logger;
         private readonly IConfiguration _configuration;
         private readonly string _containerName;
+        private readonly HashSet<string> _blockedFileExtensions;
 
         public DocumentController(
             ILogger<DocumentController> logger,
@@ -35,7 +38,14 @@ namespace DocApi.Controllers
             _configuration = configuration;
             _logger = logger;
 
+
+            // Read the container name from configuration
             _containerName = _configuration.GetValue<string>("Storage:ContainerName") ?? "documents";
+            
+            // Read blocked file extensions from configuration
+            var blockedExtensions = _configuration.GetSection("BlockedFileExtensions").Get<List<string>>() ?? new List<string>();
+            _blockedFileExtensions = new HashSet<string>(blockedExtensions.Select(ext => ext.ToLower()));
+
         }
 
         [HttpGet(Name = "GetMyDocuments")]
@@ -44,7 +54,7 @@ namespace DocApi.Controllers
             _logger.LogInformation("Fetching documents from CosmosDb for threadId : {0}", threadId);
 
             // fetch the documents from cosmos which belong to this thread
-            var results = await _documentRegistry.GetDocsPerThread(threadId);
+            var results = await _documentRegistry.GetDocsPerThreadAsync(threadId);
 
             _logger.LogInformation("Comparing documents from Cosmos against Search for threadId : {0}", threadId);
 
@@ -52,7 +62,7 @@ namespace DocApi.Controllers
             return await _searchService.IsChunkingComplete(results);
         }
 
-        [HttpPost(Name = "Upload")]
+        [HttpPost("upload", Name = "Upload")]
         public async Task<IActionResult> UploadDocuments(List<IFormFile> documents, string userId, [FromRoute] string threadId)
         {
             if (documents == null || !documents.Any())
@@ -67,6 +77,13 @@ namespace DocApi.Controllers
             {
                 try
                 {
+                    // check if the file extension is blocked
+                    if (_blockedFileExtensions.Contains(document.FileName.Split('.').Last().ToLower()))
+                    {
+                        _logger.LogWarning("Filetype blocked: {0}", document.FileName);
+                        continue;
+                    }
+
                     _logger.LogInformation("Uploading document: {0}", document.FileName);
 
                     // First step is to upload the document to the blob storage
@@ -90,12 +107,60 @@ namespace DocApi.Controllers
                 }
             }
 
-            // Third step is to kick off the indexer
-            _logger.LogInformation("Starting indexing process.");
-            var chunks = await _searchService.StartIndexing();
-            _logger.LogInformation("Indexing process started.");
+            if (uploadResults != null)
+            {
+                // Third step is to kick off the indexer
+                _logger.LogInformation("Starting indexing process.");
+                var chunks = await _searchService.StartIndexing();
+                _logger.LogInformation("Indexing process started.");
+                return Ok(uploadResults);
+            }
 
-            return Ok(uploadResults);
+            return Ok();
+        }
+
+        [HttpPost("delete/{documentId}", Name = "DeleteDocumentFromThread")]
+        public async Task<IActionResult> RemoveDocumentAsync([FromRoute] string threadId, string documentId)
+        {
+            _logger.LogInformation("Fetching documents from CosmosDb for threadId {0} and documentId {1}", threadId, documentId);
+
+            // fetch the documents from cosmos which belong to this thread
+            var results = await _documentRegistry.GetDocsPerThreadAsync(threadId);
+            var updatedResults = results
+                .Where(doc => doc.Id == documentId)
+                .Select(doc => { doc.Deleted = true; return doc; })
+                .ToList();
+
+            // if the document is found, soft delete it
+            if (updatedResults != null && updatedResults.Any())
+            {
+                _logger.LogInformation("Soft deleting document from CosmosDb for threadId {0} and documentId {1}", threadId, documentId);
+                await _documentRegistry.RemoveDocumentAsync(updatedResults.First());
+                return Ok();
+            }
+
+            // if the document is not found, return a 404
+            return NotFound();
+        }
+
+        [HttpPost("delete", Name = "DeleteDocument")]
+        public async Task<IActionResult> RemoveDocumentFromThreadAsync([FromRoute] string threadId)
+        {
+            _logger.LogInformation("Fetching documents from CosmosDb for threadId : {0}", threadId);
+
+            // fetch the documents from cosmos which belong to this thread
+            var results = await _documentRegistry.GetDocsPerThreadAsync(threadId);
+            var updatedResults = results.Select(doc => { doc.Deleted = true; return doc; }).ToList();
+
+            if (updatedResults != null && updatedResults.Any())
+            {
+                _logger.LogInformation("Soft deleting from CosmosDb for threadId {0}", threadId);
+                await _documentRegistry.RemoveDocumentAsync(updatedResults.First());
+                return Ok();
+            }
+
+
+            return NotFound();
         }
     }
 }
