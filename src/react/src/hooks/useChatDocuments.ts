@@ -17,12 +17,10 @@ export const useChatDocuments = (chatId: string | undefined) => {
     });
 
     useEffect(() => {
-        if (chatId) {
-            if (documentData) {
-                setDocuments(documentData);
-            }
+        if (documentData) {
+            setDocuments(documentData);
         }
-    }, [chatId, documentData]);
+    }, [ documentData]);
 
     const { mutateAsync: addDocuments} = useMutation({
         mutationFn: documentService.addDocumentsAsync,
