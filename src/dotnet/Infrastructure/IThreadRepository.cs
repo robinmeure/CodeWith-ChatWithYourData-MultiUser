@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace Infrastructure;
 
-public interface IThreadRegistry
+public interface IThreadRepository
 {
     Task<List<Domain.Thread>> GetThreadsAsync(string userId);
     Task<Domain.Thread> CreateThreadAsync(string userId);

@@ -1,5 +1,5 @@
 import { makeStyles, tokens } from '@fluentui/react-components';
-import { useChat } from '../../hooks/useChat';
+import { useChatMessages } from '../../hooks/useChatMessages';
 import { useState } from 'react';
 import { MessageList } from './MessageList';
 import { ChatInput } from './ChatInput';
@@ -34,13 +34,13 @@ type chatInterfaceType = {
 
 export function ChatInterface({ selectedChatId }: chatInterfaceType) {
     const classes = useClasses();
-    const { chat, messages, sendMessage, chatPending } = useChat(selectedChatId);
+    const { messages, sendMessage, chatPending } = useChatMessages(selectedChatId);
     const [userInput, setUserInput] = useState<string>("");
     const [selectedTab, setSelectedTab] = useState<string>("chat");
 
 
     const submitMessage = () => {
-        if (chat && userInput) {
+        if (selectedChatId && userInput) {
             setUserInput("");
             sendMessage({ message: userInput });
         }
@@ -56,7 +56,7 @@ export function ChatInterface({ selectedChatId }: chatInterfaceType) {
                         <ChatInput value={userInput} setValue={setUserInput} onSubmit={submitMessage} />
                     </>
                 )}
-                {(selectedTab === "documents" && selectedChatId) && (<DocumentViewer chatId={chat?.id} />)}
+                {(selectedTab === "documents" && selectedChatId) && (<DocumentViewer chatId={selectedChatId} />)}
             </div>
         </div>
     );

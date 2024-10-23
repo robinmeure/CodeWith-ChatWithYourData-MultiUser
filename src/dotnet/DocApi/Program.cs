@@ -12,12 +12,26 @@ using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Configuration.EnvironmentVariables;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
+using Microsoft.KernelMemory;
+using Microsoft.AspNetCore.DataProtection;
+using System.Net.Sockets;
+using Microsoft.AspNetCore.DataProtection.KeyManagement;
+using Elastic.Transport;
+using Microsoft.Identity.Client;
+using Microsoft.Extensions.VectorData;
+using Microsoft.SemanticKernel.Data;
+using Microsoft.SemanticKernel.Connectors.AzureAISearch;
+using Microsoft.SemanticKernel.Connectors.OpenAI;
+using Microsoft.SemanticKernel.Connectors.AzureOpenAI;
+using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace DocApi
 {
     public class Program
     {
-        public static void Main(string[] args)
+    
+    public static void Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
             DefaultAzureCredentialOptions azureCredentialOptions =
@@ -73,19 +87,26 @@ namespace DocApi
             {
                 string endpoint = openAIConfig["EndPoint"];
                 string completionModel = openAIConfig["CompletionModel"];
+                string embeddingModel = openAIConfig["EmbeddingModel"];
                 string key = openAIConfig["Key"];
+                string searchUri = searchConfig["EndPoint"];
+                string searchKey = searchConfig["ApiKey"];
                 
                 var kernelBuilder = Kernel.CreateBuilder();
                 kernelBuilder.AddAzureOpenAIChatCompletion(completionModel, endpoint, key);
-                var kernel = kernelBuilder.Build();
-                builder.Services.AddSingleton(sp => kernel);
-                builder.Services.AddSingleton(sp => kernel.GetRequiredService<IChatCompletionService>());
+                builder.Services.AddSingleton(kernelBuilder.Build());
+
+
+                // Search
+                var embedding = new AzureOpenAITextEmbeddingGenerationService(embeddingModel, endpoint, key);
+                var collection = new AzureAISearchVectorStoreRecordCollection<IndexDoc>(new SearchIndexClient(new Uri(searchUri), new AzureKeyCredential(searchKey)), "onyourdata");               
+                builder.Services.AddSingleton(new VectorStoreTextSearch<IndexDoc>(collection, embedding));
             }
 
             builder.Services.AddScoped<IDocumentRegistry, CosmosDocumentRegistry>();
             builder.Services.AddScoped<IDocumentStore, BlobDocumentStore>();
             builder.Services.AddScoped<ISearchService, AISearchService>();
-            builder.Services.AddScoped<IThreadRegistry>(sp =>
+            builder.Services.AddSingleton<IThreadRepository>(sp =>
             {
                 string accountEndpoint = cosmosConfig["AccountEndpoint"];
                 string databaseName = cosmosConfig["DatabaseName"];
@@ -100,12 +121,21 @@ namespace DocApi
                 var client = new CosmosClient(accountEndpoint, azureCredential, cosmosClientOptions);
                 var database = client.GetDatabase(databaseName);
                 var container = database.GetContainer(containerName);
-                return new CosmosThreadRegistry(container);
+                return new CosmosThreadRepository(container);
             });
             builder.Services.AddControllers();
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
+
+            // CORS.
+            builder.Services.AddCors(options =>
+            {
+                options.AddPolicy("AllowLocalhost8000",
+                    builder => builder.WithOrigins("http://localhost:8000")
+                                      .AllowAnyHeader()
+                                      .AllowAnyMethod());
+            });
 
             var app = builder.Build();
 
@@ -115,11 +145,13 @@ namespace DocApi
                 app.UseSwagger();
                 app.UseSwaggerUI();
             }
+            
 
             app.UseHttpsRedirection();
 
             app.UseAuthorization();
 
+            app.UseCors("AllowLocalhost8000");
 
             app.MapControllers();
 

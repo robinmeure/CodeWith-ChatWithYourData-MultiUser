@@ -3,26 +3,25 @@ import { useEffect, useState } from "react";
 import { ChatService } from "../services/ChatService";
 import { IChatMessage } from "../models/ChatMessage";
 
-export const useChat = (chatId: string | undefined) => {
+export const useChatMessages = (chatId: string | undefined) => {
 
     const chatService = new ChatService();
 
     const [messages, setMessages] = useState<IChatMessage[]>([]);
 
-    const { isPending: chatPending, error: chatError, data: chat } = useQuery({
+    const { isPending: chatPending, error: chatError, data: messagesResult } = useQuery({
         queryKey: ['chat', chatId],
-        queryFn: async () => chatService.getChatAsync(chatId || ""),
+        queryFn: async () => chatService.getChatMessagesAsync({chatId: chatId || "", userId: "demouser"}),
         enabled: chatId != undefined,
         staleTime: 10000
     });
 
     useEffect(() => {
-        if (chat) {
-            if (chat.messages) {
-                setMessages(chat.messages.filter(message => message.role !== 'system'));
-            }
+        if (messagesResult) {
+            setMessages(messagesResult.filter(message => message.role !== 'system'));
+
         }
-    }, [chat])
+    }, [messagesResult])
 
 
     const sendMessage = async ({ message }: { message: string }) => {
@@ -42,7 +41,7 @@ export const useChat = (chatId: string | undefined) => {
             return updated;
         });
 
-        const response = await chatService.sendMessageAsync(chatId, message);
+        const response = await chatService.sendMessageAsync({chatId: chatId, message: message, userId: "demouser"});
         
         if (!response || !response.body) {
             return;
@@ -72,7 +71,6 @@ export const useChat = (chatId: string | undefined) => {
     return {
         chatPending,
         chatError,
-        chat,
         messages,
         sendMessage
     };

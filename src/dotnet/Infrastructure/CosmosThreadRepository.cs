@@ -1,4 +1,5 @@
-﻿using Azure.Storage.Blobs;
+﻿using Azure.Search.Documents.Models;
+using Azure.Storage.Blobs;
 using Domain;
 using Microsoft.Azure.Cosmos;
 using System;
@@ -8,15 +9,16 @@ using System.Reflection.Metadata;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 
 namespace Infrastructure
 {
     
-    public class CosmosThreadRegistry : IThreadRegistry
+    public class CosmosThreadRepository : IThreadRepository
     {
         private Container _container;
         
-        public CosmosThreadRegistry(Container cosmosDbContainer)
+        public CosmosThreadRepository(Container cosmosDbContainer)
         {
             _container = cosmosDbContainer;
         }
@@ -25,7 +27,7 @@ namespace Infrastructure
         {
 
             List<Domain.Thread> threads = new List<Domain.Thread>();
-            string query = string.Format("SELECT * FROM c WHERE c.userId = '{0}' AND c.type = 'CHAT_THREAD' AND c.deleted = false", userId);
+            string query = string.Format("SELECT * FROM c WHERE c.userId = '{0}' AND c.type = 'CHAT_THREAD' AND c.deleted = false ORDER BY c._ts DESC", userId);
             var queryDefinition = new QueryDefinition(query);
             var queryOptions = new QueryRequestOptions
             {
@@ -53,6 +55,13 @@ namespace Infrastructure
             if (thread == null)
             {
                 return false;
+            }
+
+            var messages = await this.GetMessagesAsync(userId, threadId);
+
+            foreach(ThreadMessage message in messages)
+            {
+                await _container.DeleteItemAsync<ThreadMessage>(message.Id, new PartitionKey(userId));
             }
 
             thread.Deleted = true;
