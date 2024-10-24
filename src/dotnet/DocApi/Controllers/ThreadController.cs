@@ -1,21 +1,9 @@
-using Azure.Storage.Blobs;
-using Azure.Storage.Blobs.Models;
 using Domain;
 using Infrastructure;
-using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Identity.Client;
-using System.Reflection.Metadata;
-using System.Xml.Linq;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.Connectors.AzureOpenAI;
-using Microsoft.SemanticKernel.Connectors.OpenAI;
-using Microsoft.KernelMemory;
 using Microsoft.SemanticKernel.Data;
-using Microsoft.SemanticKernel.PromptTemplates.Handlebars;
-using DocumentFormat.OpenXml.Wordprocessing;
-using Microsoft.SemanticKernel.Connectors.AzureAISearch;
 using System.Text;
 using DocApi.Utils;
 

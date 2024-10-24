@@ -23,12 +23,16 @@ const columns = [
 
 type documentGridProps = { 
       documents?: IDocument[];
-      deleteDocument: (documentId: string) => Promise<boolean>
+      deleteDocument:  ({chatId, documentId}:{ chatId: string; documentId: string; }) => Promise<boolean>
 }
 
 export function DocumentGrid({ documents, deleteDocument } : documentGridProps) {
 
     const classes = useClasses();
+
+    const handleDelete = async (chatId: string, documentId: string) => {
+        await deleteDocument({chatId: chatId, documentId: documentId});
+    }
 
     return (
         <div className={classes.container}>
@@ -59,7 +63,7 @@ export function DocumentGrid({ documents, deleteDocument } : documentGridProps) 
                            
                             <TableCell role="gridcell">
                                 <TableCellLayout className={classes.deleteColumn}>
-                                    <Button icon={<Delete12Regular />} onClick={() => deleteDocument(item.id)}/>
+                                    <Button icon={<Delete12Regular />} onClick={() => handleDelete(item.threadId, item.id)}/>
                                 </TableCellLayout>
                             </TableCell>
                         </TableRow>
