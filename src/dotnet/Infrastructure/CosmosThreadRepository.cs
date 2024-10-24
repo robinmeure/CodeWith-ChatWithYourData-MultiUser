@@ -4,29 +4,42 @@ using Domain;
 using Microsoft.Azure.Cosmos;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.Drawing;
 using System.Linq;
 using System.Reflection.Metadata;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
+using Thread = Domain.Thread;
+using Container = Microsoft.Azure.Cosmos.Container;
 
 namespace Infrastructure
 {
-    
+
     public class CosmosThreadRepository : IThreadRepository
     {
         private Container _container;
-        
+
         public CosmosThreadRepository(Container cosmosDbContainer)
         {
             _container = cosmosDbContainer;
         }
 
-        public async Task<List<Domain.Thread>> GetThreadsAsync(string userId)
+        public List<ThreadMessage> GetAllThreads(DateTime expirationDate)
+        {
+            IQueryable<ThreadMessage> threads = _container
+                .GetItemLinqQueryable<ThreadMessage>(allowSynchronousQueryExecution: true)
+                .Where(o => o.Created <= expirationDate);
+
+            return threads.ToList();
+        }
+
+        public async Task<List<Thread>> GetThreadsAsync(string userId)
         {
 
-            List<Domain.Thread> threads = new List<Domain.Thread>();
+            List<Thread> threads = new List<Thread>();
             string query = string.Format("SELECT * FROM c WHERE c.userId = '{0}' AND c.type = 'CHAT_THREAD' AND c.deleted = false ORDER BY c._ts DESC", userId);
             var queryDefinition = new QueryDefinition(query);
             var queryOptions = new QueryRequestOptions
@@ -59,7 +72,7 @@ namespace Infrastructure
 
             var messages = await this.GetMessagesAsync(userId, threadId);
 
-            foreach(ThreadMessage message in messages)
+            foreach (ThreadMessage message in messages)
             {
                 await _container.DeleteItemAsync<ThreadMessage>(message.Id, new PartitionKey(userId));
             }
@@ -73,7 +86,7 @@ namespace Infrastructure
                 return false;
             }
             return true;
-            
+
         }
 
         public async Task<Domain.Thread> CreateThreadAsync(string userId)
@@ -131,7 +144,7 @@ namespace Infrastructure
         {
             string messageId = Guid.NewGuid().ToString();
             DateTime now = DateTime.Now;
-          
+
             ThreadMessage newMessage = new()
             {
 
@@ -140,7 +153,8 @@ namespace Infrastructure
                 ThreadId = threadId,
                 UserId = userId,
                 Role = role,
-                Content = message
+                Content = message,
+                Created = DateTime.Now
             };
 
             var response = await _container.CreateItemAsync<ThreadMessage>(newMessage, new PartitionKey(userId));

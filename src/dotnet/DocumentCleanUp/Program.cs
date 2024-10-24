@@ -1,4 +1,6 @@
 using Azure.Identity;
+using Azure.Search.Documents.Indexes;
+using Azure.Search.Documents;
 using Infrastructure;
 using Infrastructure.Helpers;
 using Microsoft.Azure.Cosmos;
@@ -14,7 +16,6 @@ var host = new HostBuilder()
     .ConfigureServices(services =>
     {
         services.AddApplicationInsightsTelemetryWorkerService();
-
         //read configuration
         var builder = new ConfigurationBuilder()
             .AddEnvironmentVariables()
@@ -30,18 +31,18 @@ var host = new HostBuilder()
         services.AddAzureClients(clientBuilder =>
         {
             // Register clients for each service
-            Uri serviceUri = new Uri(config["StorageServiceUri"]);
+            Uri serviceUri = new Uri(config["Storage:ServiceUri"]);
             clientBuilder.AddBlobServiceClient(serviceUri);
             clientBuilder.UseCredential(azureCredential);
         });
 
-        
+
         services.AddSingleton(sp =>
         {
-            string accountEndpoint = config["CosmosDbConnection:accountEndpoint"];
-            string cosmosDBDatabase = config["CosmosDBDatabase"];
-            string cosmosDBContainer = config["CosmosDBContainer"];
-    
+            string accountEndpoint = config["Cosmos:AccountEndpoint"];
+            string cosmosDBDatabase = config["Cosmos:DatabaseName"];
+            string cosmosDBContainer = config["Cosmos:Container"];
+
             // Create and configure CosmosClientOptions
             var cosmosClientOptions = new CosmosClientOptions
             {
@@ -53,12 +54,19 @@ var host = new HostBuilder()
             var database = client.GetDatabase(cosmosDBDatabase);
             return database.GetContainer(cosmosDBContainer);
         });
-      
 
+        Uri serviceUri = new Uri(config["Search:EndPoint"]);
+        string indexName = config["Search:IndexName"];
+
+        services.AddSingleton(sp => new SearchClient(serviceUri, indexName, azureCredential));
+        services.AddSingleton(sp => new SearchIndexClient(serviceUri, azureCredential));
+        services.AddSingleton(sp => new SearchIndexerClient(serviceUri, azureCredential));
 
 
         services.AddScoped<IDocumentStore, BlobDocumentStore>();
         services.AddScoped<IDocumentRegistry, CosmosDocumentRegistry>();
+        //services.AddSingleton<IConfiguration>(config);
+
         services.ConfigureFunctionsApplicationInsights();
     })
     .Build();
