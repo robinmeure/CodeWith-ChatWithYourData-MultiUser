@@ -14,6 +14,7 @@ using System.Threading.Tasks;
 using System.Xml.Linq;
 using Thread = Domain.Thread;
 using Container = Microsoft.Azure.Cosmos.Container;
+using Microsoft.Azure.Cosmos.Linq;
 
 namespace Infrastructure
 {
@@ -36,30 +37,76 @@ namespace Infrastructure
             return threads.ToList();
         }
 
+        public List<string> GetAllThreadIds(DateTime expirationDate)
+        {
+            IQueryable<string> threadIds = _container
+                .GetItemLinqQueryable<ThreadMessage>(allowSynchronousQueryExecution: true)
+                .Where(o => o.Created <= expirationDate)
+                .Select(o => o.ThreadId)
+                .Distinct();
+
+            return threadIds.ToList();
+        }
+
         public async Task<List<Thread>> GetThreadsAsync(string userId)
         {
+            var threadsQuery = _container
+                .GetItemLinqQueryable<Thread>(allowSynchronousQueryExecution: true)
+                .Where(t => t.UserId == userId && t.Type == "CHAT_THREAD" && !t.Deleted)
+                .OrderByDescending(t => t.ThreadName);
 
-            List<Thread> threads = new List<Thread>();
-            string query = string.Format("SELECT * FROM c WHERE c.userId = '{0}' AND c.type = 'CHAT_THREAD' AND c.deleted = false ORDER BY c._ts DESC", userId);
-            var queryDefinition = new QueryDefinition(query);
-            var queryOptions = new QueryRequestOptions
-            {
-                MaxItemCount = 500
-            };
+            var iterator = threadsQuery.ToFeedIterator();
 
-            using (var iterator = _container.GetItemQueryIterator<Domain.Thread>(queryDefinition, requestOptions: queryOptions))
+            var threads = new List<Thread>();
+            while (iterator.HasMoreResults)
             {
-                while (iterator.HasMoreResults)
-                {
-                    var response = await iterator.ReadNextAsync();
-                    foreach (var item in response)
-                    {
-                        threads.Add(item);
-                    }
-                }
+                var response = await iterator.ReadNextAsync();
+                threads.AddRange(response);
             }
 
             return threads;
+        }
+
+        public async Task<bool> MarkThreadAsDeletedAsync(string userId, string threadId)
+        {
+            var fieldsToUpdate = new Dictionary<string, object>
+            {
+                { "deleted", true },
+            };
+
+            try
+            {
+                return await UpdateThreadFieldsAsync(threadId, userId, fieldsToUpdate);
+            }
+            catch (CosmosException cosmosEx)
+            {
+                throw new Exception($"Failed to mark thread as deleted: {cosmosEx.Message}", cosmosEx);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"An error occurred while marking thread as deleted: {ex.Message}", ex);
+            }
+        }
+
+        internal async Task<bool> UpdateThreadFieldsAsync(string threadId, string userId, Dictionary<string, object> fieldsToUpdate)
+        {
+            var patchOperations = new List<PatchOperation>();
+
+            foreach (var field in fieldsToUpdate)
+            {
+                patchOperations.Add(PatchOperation.Set($"/{field.Key}", field.Value));
+            }
+
+            try
+            {
+                var response = await _container.PatchItemAsync<Thread>(threadId, new PartitionKey(userId), patchOperations);
+                return response.StatusCode == System.Net.HttpStatusCode.OK;
+            }
+            catch (CosmosException ex)
+            {
+                // Handle exception
+                throw new Exception($"Failed to update thread: {ex.Message}", ex);
+            }
         }
 
         public async Task<bool> DeleteThreadAsync(string userId, string threadId)
@@ -91,19 +138,13 @@ namespace Infrastructure
 
         public async Task<Domain.Thread> CreateThreadAsync(string userId)
         {
-
-            string threadId = Guid.NewGuid().ToString();
-            DateTime now = DateTime.Now;
-            string threadName = now.ToString("dd MMM yyyy, HH:mm");
-            Domain.Thread newThread = new()
+            var newThread = new Domain.Thread
             {
-
-                Id = threadId,
+                Id = Guid.NewGuid().ToString(),
                 Type = "CHAT_THREAD",
                 UserId = userId,
-                ThreadName = threadName
+                ThreadName = DateTime.Now.ToString("dd MMM yyyy, HH:mm")
             };
-
 
             var response = await _container.CreateItemAsync<Domain.Thread>(newThread, new PartitionKey(userId));
             if (response.StatusCode != System.Net.HttpStatusCode.Created)
@@ -116,25 +157,18 @@ namespace Infrastructure
 
         public async Task<List<ThreadMessage>> GetMessagesAsync(string userId, string threadId)
         {
+            var messagesQuery = _container
+                .GetItemLinqQueryable<ThreadMessage>(allowSynchronousQueryExecution: true)
+                .Where(m => m.ThreadId == threadId)
+                .OrderBy(m => m.Created);
 
-            List<ThreadMessage> messages = new List<ThreadMessage>();
-            string query = string.Format("SELECT * FROM m WHERE m.threadId = '{0}' ORDER BY m._ts ASC", threadId);
-            var queryDefinition = new QueryDefinition(query);
-            var queryOptions = new QueryRequestOptions
-            {
-                MaxItemCount = 500
-            };
+            var iterator = messagesQuery.ToFeedIterator();
 
-            using (var iterator = _container.GetItemQueryIterator<ThreadMessage>(queryDefinition, requestOptions: queryOptions))
+            var messages = new List<ThreadMessage>();
+            while (iterator.HasMoreResults)
             {
-                while (iterator.HasMoreResults)
-                {
-                    var response = await iterator.ReadNextAsync();
-                    foreach (var item in response)
-                    {
-                        messages.Add(item);
-                    }
-                }
+                var response = await iterator.ReadNextAsync();
+                messages.AddRange(response);
             }
 
             return messages;

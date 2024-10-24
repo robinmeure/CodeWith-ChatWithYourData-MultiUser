@@ -10,6 +10,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using System.Configuration;
+using DocumentCleanUp;
 
 var host = new HostBuilder()
     .ConfigureFunctionsWebApplication()
@@ -62,7 +63,7 @@ var host = new HostBuilder()
         services.AddSingleton(sp => new SearchIndexClient(serviceUri, azureCredential));
         services.AddSingleton(sp => new SearchIndexerClient(serviceUri, azureCredential));
 
-
+        services.AddSingleton<ThreadCleanup>();
         services.AddScoped<IDocumentStore, BlobDocumentStore>();
         services.AddScoped<IDocumentRegistry, CosmosDocumentRegistry>();
         //services.AddSingleton<IConfiguration>(config);

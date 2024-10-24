@@ -56,7 +56,7 @@ namespace Infrastructure
         }
 
 
-        private async Task<bool> MarkDocumentAsDeletedAsync(string documentId, string userId)
+        internal async Task<bool> MarkDocumentAsDeletedAsync(string documentId, string userId)
         {
             var fieldsToUpdate = new Dictionary<string, object>
             {
@@ -96,7 +96,7 @@ namespace Infrastructure
             return true;
         }
 
-        public async Task<bool> UpdateDocumentFieldsAsync(string documentId, string userId, Dictionary<string, object> fieldsToUpdate)
+        internal async Task<bool> UpdateDocumentFieldsAsync(string documentId, string userId, Dictionary<string, object> fieldsToUpdate)
         {
             var patchOperations = new List<PatchOperation>();
 
