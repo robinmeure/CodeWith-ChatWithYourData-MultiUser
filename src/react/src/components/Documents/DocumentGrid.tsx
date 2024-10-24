@@ -18,8 +18,7 @@ const useClasses = makeStyles({
 
 const columns = [
     { columnKey: "fileName", label: "Document name" },
-    { columnKey: "status", label: "Status" },
-    { columnKey: "lastUpdated", label: "Last updated" }
+    { columnKey: "status", label: "Status" }
 ];
 
 type documentGridProps = { 
@@ -55,11 +54,9 @@ export function DocumentGrid({ documents, deleteDocument } : documentGridProps) 
                                 {item.documentName}
                             </TableCell>
                             <TableCell tabIndex={0} role="gridcell">
-                                {item.availableInSearchIndex}
+                                {item.availableInSearchIndex ? "Available" : "Pending"}
                             </TableCell>
-                            <TableCell tabIndex={0} role="gridcell">
-                                {item.lastUpdated}
-                            </TableCell>
+                           
                             <TableCell role="gridcell">
                                 <TableCellLayout className={classes.deleteColumn}>
                                     <Button icon={<Delete12Regular />} onClick={() => deleteDocument(item.id)}/>

@@ -25,6 +25,7 @@ using Microsoft.SemanticKernel.Connectors.OpenAI;
 using Microsoft.SemanticKernel.Connectors.AzureOpenAI;
 using Newtonsoft.Json;
 using System.Text.Json.Serialization;
+using DocApi.Utils;
 
 namespace DocApi
 {
@@ -94,7 +95,10 @@ namespace DocApi
                 
                 var kernelBuilder = Kernel.CreateBuilder();
                 kernelBuilder.AddAzureOpenAIChatCompletion(completionModel, endpoint, key);
-                builder.Services.AddSingleton(kernelBuilder.Build());
+                var kernel = kernelBuilder.Build();
+                builder.Services.AddSingleton(kernel);
+                builder.Services.AddSingleton(new PromptUtils(kernel));
+
 
 
                 // Search
