@@ -2,16 +2,19 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { ChatService } from "../services/ChatService";
 import { IChatMessage } from "../models/ChatMessage";
+import { useMsal } from "@azure/msal-react";
 
 export const useChatMessages = (chatId: string | undefined) => {
 
     const chatService = new ChatService();
+    const { instance } = useMsal();
+    const userId = instance.getAllAccounts()[0].localAccountId;
 
     const [messages, setMessages] = useState<IChatMessage[]>([]);
 
     const { isPending: chatPending, error: chatError, data: messagesResult } = useQuery({
         queryKey: ['chat', chatId],
-        queryFn: async () => chatService.getChatMessagesAsync({chatId: chatId || "", userId: "demouser"}),
+        queryFn: async () => chatService.getChatMessagesAsync({chatId: chatId || "", userId: userId}),
         enabled: chatId != undefined,
         staleTime: 10000
     });
@@ -41,7 +44,7 @@ export const useChatMessages = (chatId: string | undefined) => {
             return updated;
         });
 
-        const response = await chatService.sendMessageAsync({chatId: chatId, message: message, userId: "demouser"});
+        const response = await chatService.sendMessageAsync({chatId: chatId, message: message, userId: userId});
         
         if (!response || !response.body) {
             return;

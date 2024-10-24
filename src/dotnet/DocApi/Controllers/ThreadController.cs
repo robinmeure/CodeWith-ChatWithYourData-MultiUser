@@ -18,7 +18,7 @@ namespace DocApi.Controllers
         private readonly IConfiguration _configuration;
         private readonly Kernel _kernel;
         private readonly VectorStoreTextSearch<IndexDoc> _search;
-        private readonly PromptUtils _promptUtils;
+        private readonly PromptHelper _promptHelper;
 
         public class MessageRequest
         {
@@ -32,7 +32,7 @@ namespace DocApi.Controllers
             IConfiguration configuration,
             Kernel kernel,
             VectorStoreTextSearch<IndexDoc> search,
-            PromptUtils promptUtils
+            PromptHelper promptHelper
             )
         {
             _threadRepository = cosmosThreadRepository;
@@ -40,7 +40,7 @@ namespace DocApi.Controllers
             _logger = logger;
             _kernel = kernel;
             _search = search;
-            _promptUtils = promptUtils;
+            _promptHelper = promptHelper;
         }
 
         [HttpGet("")]
@@ -106,14 +106,13 @@ namespace DocApi.Controllers
 
             List<ThreadMessage> messages = await _threadRepository.GetMessagesAsync(messageRequest.UserId, threadId);
 
-            ChatHistory history = _promptUtils.BuildConversationHistory(messages, messageRequest.Message);
+            ChatHistory history = _promptHelper.BuildConversationHistory(messages, messageRequest.Message);
            
             await _threadRepository.PostMessageAsync(messageRequest.UserId, threadId, messageRequest.Message, "user");
 
             IChatCompletionService completionService = _kernel.GetRequiredService<IChatCompletionService>();
 
-            //Rewrite query for retrieval.
-            string rewrittenQuery = await _promptUtils.RewriteQueryAsync(history);
+            string rewrittenQuery = await _promptHelper.RewriteQueryAsync(history);
 
             // Text search.
             var filter = new TextSearchFilter().Equality("ThreadId", threadId);
@@ -123,7 +122,7 @@ namespace DocApi.Controllers
             };
             KernelSearchResults<object> searchResults = await _search.GetSearchResultsAsync(rewrittenQuery, searchOptions);
 
-            await _promptUtils.AugmentHistoryWithSearchResults(history, searchResults);
+            await _promptHelper.AugmentHistoryWithSearchResults(history, searchResults);
 
             var response = completionService.GetStreamingChatMessageContentsAsync(
                 chatHistory: history,
@@ -136,7 +135,6 @@ namespace DocApi.Controllers
             {
                 await foreach (var chunk in response)
                 {
-                    Console.Write(chunk);
                     assistantResponse += chunk.Content;
                     await streamWriter.WriteAsync(chunk.Content);
                     await streamWriter.FlushAsync();

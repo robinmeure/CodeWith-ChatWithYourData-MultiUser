@@ -97,7 +97,7 @@ namespace DocApi
                 kernelBuilder.AddAzureOpenAIChatCompletion(completionModel, endpoint, key);
                 var kernel = kernelBuilder.Build();
                 builder.Services.AddSingleton(kernel);
-                builder.Services.AddSingleton(new PromptUtils(kernel));
+                builder.Services.AddSingleton(new PromptHelper(kernel));
 
 
 

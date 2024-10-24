@@ -6,7 +6,7 @@ using Microsoft.SemanticKernel.Data;
 
 namespace DocApi.Utils
 {
-    public class PromptUtils(Kernel kernel)
+    public class PromptHelper(Kernel kernel)
     {
         private readonly Kernel _kernel = kernel;
 
