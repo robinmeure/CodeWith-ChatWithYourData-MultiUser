@@ -34,7 +34,7 @@ type chatListType = {
     selectedChatId: string | undefined,
     selectChat: (chatId?: string) => void,
     addChat: (userId: string) => Promise<IChat>,
-    deleteChat: (chatId: string) => Promise<boolean>,
+    deleteChat: ({chatId, userId }: { chatId: string; userId: string; }) => Promise<boolean>,
     loading: boolean
 }
 

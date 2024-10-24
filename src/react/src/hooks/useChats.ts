@@ -11,7 +11,7 @@ export const useChats = () => {
 
     const { isPending, error, data: chats } = useQuery({
         queryKey: ['chats'],
-        queryFn: async () => chatService.getChatsAsync()
+        queryFn: async () => chatService.getChatsAsync("demouser")
     });
 
     const { mutateAsync: addChat} = useMutation({
@@ -34,7 +34,7 @@ export const useChats = () => {
             if(data){
                 queryClient.invalidateQueries({ queryKey: ['chats'] });
                 if(variables){
-                    if(selectedChatId === variables){
+                    if(selectedChatId === variables.chatId){
                         selectChat();
                     }
                 }

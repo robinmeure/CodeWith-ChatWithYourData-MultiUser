@@ -1,6 +1,6 @@
 export interface IDocument {
     id: string, 
-    fileName: string,
-    status: string,
+    documentName: string,
+    availableInSearchIndex: string,
     lastUpdated: string
 }

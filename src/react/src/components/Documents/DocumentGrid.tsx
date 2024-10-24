@@ -52,10 +52,10 @@ export function DocumentGrid({ documents, deleteDocument } : documentGridProps) 
                     {documents && documents.map((item) => (
                         <TableRow key={item.id}>
                             <TableCell tabIndex={0} role="gridcell">
-                                {item.fileName}
+                                {item.documentName}
                             </TableCell>
                             <TableCell tabIndex={0} role="gridcell">
-                                {item.status}
+                                {item.availableInSearchIndex}
                             </TableCell>
                             <TableCell tabIndex={0} role="gridcell">
                                 {item.lastUpdated}

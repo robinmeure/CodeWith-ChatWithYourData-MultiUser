@@ -1,12 +1,13 @@
 import { IChat } from "../models/Chat";
+import { IChatMessage } from "../models/ChatMessage";
 
 export class ChatService {
 
     private readonly baseUrl = import.meta.env.VITE_BACKEND_URL;
 
-    public getChatsAsync = async (): Promise<IChat[]> => {
+    public getChatsAsync = async (userId: string): Promise<IChat[]> => {
         try {
-            const response = await fetch(`${this.baseUrl}/chats`);
+            const response = await fetch(`${this.baseUrl}/threads?userId=${userId}`);
             if (!response.ok) {
                 throw new Error(`Error fetching chats: ${response.statusText}`);
             }
@@ -18,14 +19,14 @@ export class ChatService {
         return [];
     };
 
-    public getChatAsync = async (chatId: string): Promise<IChat> => {
+    public getChatMessagesAsync = async ({chatId, userId} : {chatId: string, userId: string}): Promise<IChatMessage[]> => {
         try {
-            const response = await fetch(`${this.baseUrl}/chats/${chatId}`);
+            const response = await fetch(`${this.baseUrl}/threads/${chatId}/messages?userId=${userId}`);
             if (!response.ok) {
                 throw new Error(`Error fetching chat: ${response.statusText}`);
             }
-            const chat: IChat = await response.json();
-            return chat;
+            const messages: IChatMessage[] = await response.json();
+            return messages;
         } catch (error) {
             console.error('Failed to fetch chats:', error);
             throw error;
@@ -34,23 +35,17 @@ export class ChatService {
 
     public createChatAsync = async (userId: string): Promise<IChat> => {
 
-        const body = {
-            userId: userId
-        }
-
         try {
-            const response = await fetch(`${this.baseUrl}/chats`, {
+            const response = await fetch(`${this.baseUrl}/threads?userId=${userId}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(body),
+                }
             });
             if (!response.ok) {
                 throw new Error(`Error creating chat: ${response.statusText}`);
             }
-            const jsonResponse = await response.json();
-            const chat: IChat = jsonResponse.item;
+            const chat: IChat = await response.json();
             return chat;
         } catch (error) {
             console.error('Failed to create chat:', error);
@@ -58,10 +53,10 @@ export class ChatService {
         }
     }
 
-    public deleteChatAsync = async (chatId: string): Promise<boolean> => {
+    public deleteChatAsync = async ({chatId, userId } : {chatId: string, userId: string}): Promise<boolean> => {
 
         try {
-            const response = await fetch(`${this.baseUrl}/chats/${chatId}`, {
+            const response = await fetch(`${this.baseUrl}/threads/${chatId}?userId=${userId}`, {
                 method: 'DELETE',
                 headers: {
                     'Content-Type': 'application/json',
@@ -77,15 +72,15 @@ export class ChatService {
         }
     }
 
-    public sendMessageAsync = async (chatId: string, message: string): Promise<Response> => {
+    public sendMessageAsync = async ({chatId, message, userId} : { chatId: string, message: string, userId: string }): Promise<Response> => {
 
         try{
-            const response = await fetch(`${this.baseUrl}/chats/${chatId}`, {
+            const response = await fetch(`${this.baseUrl}/threads/${chatId}/messages`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ input: message }),
+                body: JSON.stringify({ message: message, userId: userId }),
             });
             return response;
         } catch( error ) {

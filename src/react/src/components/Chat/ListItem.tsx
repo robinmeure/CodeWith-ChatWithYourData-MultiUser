@@ -36,7 +36,7 @@ type listItemType = {
     item: IChat,
     isSelected: boolean,
     selectChat: (chatId?: string) => void,
-    deleteChat: (chatId: string) => Promise<boolean>
+    deleteChat: ({chatId, userId }: { chatId: string; userId: string; }) => Promise<boolean>,
 }
 
 export function ListItem({ item, isSelected, selectChat, deleteChat }: listItemType) {
@@ -44,10 +44,10 @@ export function ListItem({ item, isSelected, selectChat, deleteChat }: listItemT
     const classes = useClasses();
 
     return (
-        <div key={item.id} onClick={() => selectChat(item.id)} className={mergeClasses(classes.root, isSelected && classes.selected)} title={`Chat: ${item.name}`} aria-label={`Chat list item: ${item.name}`}>
+        <div key={item.id} onClick={() => selectChat(item.id)} className={mergeClasses(classes.root, isSelected && classes.selected)} title={`Chat: ${item.threadName}`} aria-label={`Chat list item: ${item.threadName}`}>
 
-            <Text className={classes.title} title={item.name}>
-                {item.name}
+            <Text className={classes.title} title={item.threadName}>
+                {item.threadName}
             </Text>
             <Menu>
                 <MenuTrigger disableButtonEnhancement>
@@ -56,7 +56,7 @@ export function ListItem({ item, isSelected, selectChat, deleteChat }: listItemT
 
                 <MenuPopover>
                     <MenuList>
-                        <MenuItem onClick={() => deleteChat(item.id)}>Delete chat</MenuItem>
+                        <MenuItem onClick={() => deleteChat({chatId: item.id, userId: "demouser"})}>Delete chat</MenuItem>
                     </MenuList>
                 </MenuPopover>
             </Menu>

@@ -6,12 +6,12 @@ export class DocumentService {
 
     public getDocumentsAsync = async (chatId: string): Promise<IDocument[]> => {
         try {
-            const response = await fetch(`${this.baseUrl}/chats/${chatId}`);
+            const response = await fetch(`${this.baseUrl}/chats/${chatId}/Document`);
             if (!response.ok) {
                 throw new Error(`Error fetching chat: ${response.statusText}`);
             }
-            const jsonResponse = await response.json();
-            const documents: IDocument[] = jsonResponse.documents;
+           
+            const documents: IDocument[] = await response.json();
             return documents;
         } catch (error) {
             console.error('Failed to fetch chats:', error);
@@ -19,7 +19,7 @@ export class DocumentService {
         }
     };
 
-    public addDocumentsAsync = async ({ chatId, documents }: { chatId: string, documents: File[] }): Promise<boolean> => {
+    public addDocumentsAsync = async ({ chatId, userId, documents }: { chatId: string, userId: string, documents: File[] }): Promise<boolean> => {
 
         if (!chatId || !Array.isArray(documents) || documents.length === 0) {
             console.log('No chat or documents to upload');
@@ -27,14 +27,17 @@ export class DocumentService {
         }
         const formData = new FormData();
         documents.forEach(file => {
-            formData.append('file', file);
+            formData.append('documents', file);
         });
 
+        console.log("UPLOAD");
+
         try {
-            const response = await fetch(`${this.baseUrl}/chats/${chatId}/documents`, {
+            const response = await fetch(`${this.baseUrl}/chats/${chatId}/Document/upload?userId=${userId}`, {
                 method: 'POST',
-                body: formData,
+                body: formData
             });
+            console.log(response);
             if (!response.ok) {
                 return false;
             }

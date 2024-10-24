@@ -45,7 +45,7 @@ export function MessageList({ messages, loading }: messageListType) {
                 {loading ? (<ChatSkeleton />) : (
                     <>
                         {messages &&
-                            messages.map((item: { role: string, content: string }) => {
+                            messages.map((item: IChatMessage) => {
                                 return <Message message={item} />
                             })}</>
                 )}

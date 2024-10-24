@@ -11,7 +11,12 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DocUploadHelper", "DocUploa
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Infrastructure", "Infrastructure\Infrastructure.csproj", "{4B6E7141-9E29-43C8-941A-3E490C87977F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DocApi", "DocApi\DocApi.csproj", "{F7AF04F6-5F00-4CDE-9FFB-AF2C791FCCD7}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DocApi", "DocApi\DocApi.csproj", "{F7AF04F6-5F00-4CDE-9FFB-AF2C791FCCD7}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{B57E0E70-1C57-4FBF-A9E3-58E4B4085167}"
+	ProjectSection(SolutionItems) = preProject
+		.editorconfig = .editorconfig
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

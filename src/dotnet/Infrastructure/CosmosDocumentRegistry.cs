@@ -10,8 +10,6 @@ namespace Infrastructure
 
         //private CosmosClient _cosmosClient;
         private Container _container;
-        private string _databaseName; //= "history";
-        private string _containerName; //= "documentsperthread";
 
         public CosmosDocumentRegistry(Container cosmosDbContainer)
         {
