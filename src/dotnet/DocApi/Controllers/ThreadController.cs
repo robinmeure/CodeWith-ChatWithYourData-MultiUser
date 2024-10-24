@@ -6,13 +6,21 @@ using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.Data;
 using System.Text;
 using DocApi.Utils;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Cors;
+using Microsoft.Identity.Web.Resource;
 
 namespace DocApi.Controllers
 {
+   
     [Route("threads")]
+    [Authorize]
     [ApiController]
+    [RequiredScope("chat")]
+
     public class ThreadController : ControllerBase
     {
+        const string scopeRequiredByApi = "chat";
         private readonly IThreadRepository _threadRepository;
         private readonly ILogger<ThreadController> _logger;
         private readonly IConfiguration _configuration;

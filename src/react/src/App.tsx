@@ -21,7 +21,7 @@ const configuration: Configuration = {
 const pca = new PublicClientApplication(configuration);
 
 const authRequest = {
-  scopes: ["openid", "profile"]
+  scopes: ["openid", "profile", import.meta.env.VITE_BACKEND_SCOPE]
 };
 
 function App() {

@@ -2,14 +2,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { IDocument } from "../models/Document";
 import { DocumentService } from "../services/DocumentService";
-import { useMsal } from "@azure/msal-react";
+import { useAuth } from "./useAuth";
 
 export const useChatDocuments = (chatId: string | undefined) => {
 
     const queryClient = useQueryClient();
     const documentService = new DocumentService();
-    const { instance } = useMsal();
-    const userId = instance.getAllAccounts()[0].localAccountId;
+    const {userId, accessToken} = useAuth();   
+
 
     const [documents, setDocuments] = useState<IDocument[]>([]);
 

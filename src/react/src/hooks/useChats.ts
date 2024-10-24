@@ -1,24 +1,24 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { ChatService } from "../services/ChatService";
-import { useMsal } from "@azure/msal-react";
+import { useAuth } from "./useAuth";
 
 export const useChats = () => {
 
     const [selectedChatId, setSelectedChatId] = useState<string | undefined>(undefined);
-    const { instance } = useMsal();
-    const userId = instance.getAllAccounts()[0].localAccountId;
+    const {userId, accessToken} = useAuth();   
 
     const queryClient = useQueryClient();
     const chatService = new ChatService();
 
     const { isPending, error, data: chats } = useQuery({
         queryKey: ['chats'],
-        queryFn: async () => chatService.getChatsAsync(userId)
+        queryFn: async () => chatService.getChatsAsync(userId, accessToken),
+        enabled: userId != undefined && accessToken != undefined && accessToken != "",
     });
 
     const { mutateAsync: addChat} = useMutation({
-        mutationFn: () => chatService.createChatAsync(userId),
+        mutationFn: () => chatService.createChatAsync({userId, token: accessToken}),
         onError: () => {
             console.log('Failed to create a chat.');
         },
@@ -29,7 +29,7 @@ export const useChats = () => {
     });
 
     const { mutateAsync: deleteChat} = useMutation({
-        mutationFn: ({chatId} : { chatId: string}) => chatService.deleteChatAsync({chatId, userId}),
+        mutationFn: ({chatId} : { chatId: string}) => chatService.deleteChatAsync({chatId, userId, token: accessToken}),
         onError: () => {
             console.log('Failed to delete chat.');
         },
