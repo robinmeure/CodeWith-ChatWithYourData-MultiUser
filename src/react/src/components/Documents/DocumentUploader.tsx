@@ -40,7 +40,7 @@ const useClasses = makeStyles({
 
 
 type documentUploadButtonProps = {
-    uploadDocuments: ({ chatId, userId, documents }: { chatId: string; userId: string; documents: File[]; }) => Promise<boolean>;
+    uploadDocuments: ({ chatId, documents }: { chatId: string; documents: File[]; }) => Promise<boolean>;
     chatId: string | undefined;
 }
 
@@ -61,7 +61,6 @@ export function DocumentUploader({ uploadDocuments, chatId }: documentUploadButt
             return;
         }
         const filesArray: File[] = Array.from(files);
-        console.log(filesArray);
         setFiles(filesArray);
         setShowPopUp(true);
     }
@@ -80,7 +79,7 @@ export function DocumentUploader({ uploadDocuments, chatId }: documentUploadButt
     const handleUploadFiles = async () => {
         if (chatId) {
             setUploading(true);
-            await uploadDocuments({ chatId: chatId, userId: "demouser", documents: files });
+            await uploadDocuments({ chatId: chatId, documents: files });
             setFiles([]);
             setUploading(false);
             setShowPopUp(false);

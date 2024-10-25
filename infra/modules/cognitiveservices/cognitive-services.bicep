@@ -13,7 +13,7 @@ param sku object = {
 param deployments array = []
 
 @description('Managed identity to assign the role cognitive services user role to.')
-param aiSearchManagedIdentity string
+param roleAssignmentPrincipalIds array = []
 
 var roleDefinitionResourceId = '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'
 var kind = 'OpenAI'
@@ -47,14 +47,14 @@ resource cognitiveServicesUserRoleDefinition 'Microsoft.Authorization/roleDefini
   name: roleDefinitionResourceId
 }
 
-resource roleAssignmentAISearch 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource roleAssignments 'Microsoft.Authorization/roleAssignments@2022-04-01' = [for roleAssignmentPrincipalId in roleAssignmentPrincipalIds: {
   scope: account
-  name: guid(aiSearchManagedIdentity, cognitiveServicesUserRoleDefinition.id, account.name)
+  name: guid(roleAssignmentPrincipalId, cognitiveServicesUserRoleDefinition.id, account.name)
   properties: {
     roleDefinitionId: cognitiveServicesUserRoleDefinition.id
-    principalId: aiSearchManagedIdentity
+    principalId: roleAssignmentPrincipalId
     principalType: 'ServicePrincipal'
   }
-}
+}]
 
 output endpoint string = account.properties.endpoint
