@@ -3,7 +3,7 @@ import { IChatMessage } from "../models/ChatMessage";
 
 export class ChatService {
 
-    private readonly baseUrl = import.meta.env.VITE_BACKEND_URL;
+    private readonly baseUrl = process.env.VITE_BACKEND_URL;
 
     public getChatsAsync = async (userId: string, token: string): Promise<IChat[]> => {
 

@@ -130,7 +130,7 @@ namespace DocApi
             builder.Services.AddCors(options =>
             {
             options.AddPolicy("AllowLocalhost8000",
-                builder => builder.WithOrigins("http://localhost:8000")
+                builder => builder.WithOrigins("https://frontend-dywsnpr3ttylu.azurewebsites.net")
                                   .AllowAnyHeader()
                                   .AllowAnyMethod()
                                   .AllowCredentials());
@@ -147,12 +147,13 @@ namespace DocApi
 
 
             var app = builder.Build();
+            app.UseSwagger();
+            app.UseSwaggerUI();
 
             // Configure the HTTP request pipeline.
             if (app.Environment.IsDevelopment())
             {
-                app.UseSwagger();
-                app.UseSwaggerUI();
+                
             }
 
             app.UseCors("AllowLocalhost8000");

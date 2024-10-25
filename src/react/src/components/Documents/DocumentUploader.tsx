@@ -61,7 +61,6 @@ export function DocumentUploader({ uploadDocuments, chatId }: documentUploadButt
             return;
         }
         const filesArray: File[] = Array.from(files);
-        console.log(filesArray);
         setFiles(filesArray);
         setShowPopUp(true);
     }

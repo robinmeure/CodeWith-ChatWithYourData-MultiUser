@@ -8,7 +8,7 @@ export const useAuth = () => {
     const userId = instance.getAllAccounts()[0].localAccountId;
     
     let accessTokenRequest = { 
-        scopes: [import.meta.env.VITE_BACKEND_SCOPE],
+        scopes: [process.env.VITE_BACKEND_SCOPE || ""],
         account: instance.getAllAccounts()[0]
     };
 
@@ -17,7 +17,6 @@ export const useAuth = () => {
             try{
                 const response = await instance.acquireTokenSilent(accessTokenRequest);
                 setAccessToken(response.accessToken);
-                console.log(response.accessToken)
             }catch(error){
                 console.log("Silent token acquisition failed. Acquiring token using redirect.");
                 console.error(error);

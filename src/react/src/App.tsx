@@ -8,8 +8,8 @@ const queryClient = new QueryClient()
 
 const configuration: Configuration = {
   auth: {
-    clientId: import.meta.env.VITE_PUBLIC_APP_ID,
-    authority: import.meta.env.VITE_PUBLIC_AUTHORITY_URL,
+    clientId: process.env.VITE_PUBLIC_APP_ID || "",
+    authority: process.env.VITE_PUBLIC_AUTHORITY_URL || "",
     redirectUri: "/",
     postLogoutRedirectUri: "/",
   },
@@ -21,7 +21,7 @@ const configuration: Configuration = {
 const pca = new PublicClientApplication(configuration);
 
 const authRequest = {
-  scopes: ["openid", "profile", import.meta.env.VITE_BACKEND_SCOPE]
+  scopes: ["openid", "profile", process.env.VITE_BACKEND_SCOPE|| ""]
 };
 
 function App() {

@@ -2,7 +2,7 @@ import { IDocument } from "../models/Document";
 
 export class DocumentService {
 
-    private readonly baseUrl = import.meta.env.VITE_BACKEND_URL;
+    private readonly baseUrl = process.env.VITE_BACKEND_URL;
 
     public getDocumentsAsync = async (chatId: string): Promise<IDocument[]> => {
         try {
@@ -35,7 +35,6 @@ export class DocumentService {
                 method: 'POST',
                 body: formData
             });
-            console.log(response);
             if (!response.ok) {
                 return false;
             }

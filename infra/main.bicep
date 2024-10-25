@@ -16,11 +16,67 @@ param embeddingModelName string = 'text-embedding-ada-002'
 @description('Name/id of the embedding model to be used for the indexer during indexing.')
 param indexerEmbeddingModelId string = 'text-embedding-ada-002-indexer'
 
+@description('Name of completionmodel.')
+param completionModelName string = 'gpt-4o'
+
 @description('Name/id of the embedding model to be used for the indexer during querying.')
 param integratedVectorEmbeddingModelId string = 'text-embedding-ada-002-aisearchquery'
 
 @description('Name of the AI search index to be created or updated, must be lowercase.')
 param indexName string = 'onyourdata'
+
+@description('Name of the app service plan.')
+param aspName string = 'asp-${uniqueString(resourceGroup().id)}'
+
+@description('Name of the back end site.')
+param backendAppName string = 'backend-${uniqueString(resourceGroup().id)}'
+
+@description('Name of the front end site.')
+param frontendAppName string = 'frontend-${uniqueString(resourceGroup().id)}'
+
+@description('Name of the cosmos DB account.')
+param cosmosAccountName string = 'cosmos-${uniqueString(resourceGroup().id)}'
+
+var cosmosDatabaseName = 'history'
+var cosmosDocumentContainerName = 'documentsperthread'
+var cosmosHistoryContainerName = 'threadhistory'
+var sqlRoleName = 'sql-contributor-${cosmosAccountName}'
+
+module appServicePlan 'br/public:avm/res/web/serverfarm:0.3.0' = {
+  name: 'appServicePlan'
+  params: {
+    name: aspName
+    location: resourceGroup().location
+    skuName: 'B1'
+  }
+}
+
+module backendSite 'br/public:avm/res/web/site:0.9.0' = {
+  name: 'backendSite'
+  params: {
+    kind: 'app'
+    name: backendAppName
+    serverFarmResourceId: appServicePlan.outputs.resourceId
+    location: resourceGroup().location
+    managedIdentities: {
+      systemAssigned: true
+    }
+  }
+}
+
+module frontendSite 'br/public:avm/res/web/site:0.9.0' = {
+  name: 'frontendSite'
+  params: {
+    kind: 'app'
+    name: frontendAppName
+    serverFarmResourceId: appServicePlan.outputs.resourceId
+    location: resourceGroup().location
+    siteConfig: {
+      appSettings: [
+      ]
+    }
+  }
+}
 
 module aiSearch 'br/public:avm/res/search/search-service:0.7.1' = {
   name: 'aiSearch'
@@ -33,6 +89,13 @@ module aiSearch 'br/public:avm/res/search/search-service:0.7.1' = {
     }
     replicaCount: 1
     partitionCount: 1
+    roleAssignments: [
+      {
+        principalId: backendSite.outputs.systemAssignedMIPrincipalId
+        principalType: 'ServicePrincipal'
+        roleDefinitionIdOrName: 'Search Index Data Contributor'
+      }
+    ]
   }
 }
 
@@ -58,6 +121,11 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.9.1' = {
               principalId: aiSearch.outputs.systemAssignedMIPrincipalId
               principalType: 'ServicePrincipal'
               roleDefinitionIdOrName: 'Storage Blob Data Reader'
+            }
+            {
+              principalId: backendSite.outputs.systemAssignedMIPrincipalId
+              principalType: 'ServicePrincipal'
+              roleDefinitionIdOrName: 'Storage Blob Data Contributor'
             }
           ]
         }
@@ -87,8 +155,19 @@ module openAi './modules/cognitiveservices/cognitive-services.bicep' = {
         }
         name: integratedVectorEmbeddingModelId
       }
+      {
+        model: {
+          format: 'OpenAI'
+          name: completionModelName
+          version: '2024-05-13'
+        }
+        name: completionModelName
+      }
     ]
-    aiSearchManagedIdentity: aiSearch.outputs.systemAssignedMIPrincipalId
+    roleAssignmentPrincipalIds: [
+      aiSearch.outputs.systemAssignedMIPrincipalId
+      backendSite.outputs.systemAssignedMIPrincipalId
+    ]
   }
 }
 
@@ -103,6 +182,52 @@ module aiSearchIndex 'modules/aisearchindex/ai-search-index.bicep' = {
     integratedVectorEmbeddingModelId: integratedVectorEmbeddingModelId
     indexerEmbeddingModelId: indexerEmbeddingModelId
     azureOpenAIEndpoint: openAi.outputs.endpoint
+  }
+}
+
+module cosmosDB 'br/public:avm/res/document-db/database-account:0.8.0' = {
+  name: 'cosmosDB'
+  params: {
+    name: cosmosAccountName
+    location: resourceGroup().location
+    sqlDatabases: [
+      {
+        name: cosmosDatabaseName
+        containers: [
+          {
+            indexingPolicy: {
+              automatic: true
+            }
+            name: cosmosDocumentContainerName
+            paths: [
+              '/userId'
+            ]
+          }
+          {
+            indexingPolicy: {
+              automatic: true
+            }
+            name: cosmosHistoryContainerName
+            paths: [
+              '/userId'
+            ]
+          }
+        ]
+      }
+    ]
+    sqlRoleAssignmentsPrincipalIds: [
+      backendSite.outputs.systemAssignedMIPrincipalId
+    ]
+    sqlRoleDefinitions: [
+      {
+        name: sqlRoleName
+        dataAction: [
+          'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/write'
+          'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/read'
+          'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/delete'
+        ]
+      }
+    ]
   }
 }
 

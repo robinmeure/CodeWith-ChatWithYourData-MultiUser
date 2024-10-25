@@ -8,7 +8,7 @@ export const useChatDocuments = (chatId: string | undefined) => {
 
     const queryClient = useQueryClient();
     const documentService = new DocumentService();
-    const {userId, accessToken} = useAuth();   
+    const {userId } = useAuth();   
 
 
     const [documents, setDocuments] = useState<IDocument[]>([]);

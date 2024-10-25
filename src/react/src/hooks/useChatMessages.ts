@@ -15,7 +15,7 @@ export const useChatMessages = (chatId: string | undefined) => {
     const { isPending: chatPending, error: chatError, data: messagesResult } = useQuery({
         queryKey: ['chat', chatId],
         queryFn: async () => chatService.getChatMessagesAsync({chatId: chatId || "", userId: userId, token: accessToken}),
-        enabled: userId != undefined && accessToken != undefined && accessToken != "",
+        enabled: userId != undefined && accessToken != undefined && accessToken != "" && chatId != "" && chatId != undefined,
         staleTime: 10000
     });
 
