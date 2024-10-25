@@ -1,4 +1,3 @@
-
 using Azure;
 using Azure.Identity;
 using Azure.Search.Documents;
@@ -93,8 +92,6 @@ namespace DocApi
                 builder.Services.AddSingleton(kernel);
                 builder.Services.AddSingleton(new PromptHelper(kernel));
 
-
-
                 // Search
                 var embedding = new AzureOpenAITextEmbeddingGenerationService(embeddingModel, endpoint, key);
                 var collection = new AzureAISearchVectorStoreRecordCollection<IndexDoc>(new SearchIndexClient(new Uri(searchUri), new AzureKeyCredential(searchKey)), "onyourdata");               
@@ -130,7 +127,7 @@ namespace DocApi
             builder.Services.AddCors(options =>
             {
             options.AddPolicy("AllowLocalhost8000",
-                builder => builder.WithOrigins("https://frontend-dywsnpr3ttylu.azurewebsites.net")
+                builder => builder.WithOrigins("http://localhost:8000")
                                   .AllowAnyHeader()
                                   .AllowAnyMethod()
                                   .AllowCredentials());
@@ -149,12 +146,6 @@ namespace DocApi
             var app = builder.Build();
             app.UseSwagger();
             app.UseSwaggerUI();
-
-            // Configure the HTTP request pipeline.
-            if (app.Environment.IsDevelopment())
-            {
-                
-            }
 
             app.UseCors("AllowLocalhost8000");
 
