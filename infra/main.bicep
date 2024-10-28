@@ -37,44 +37,26 @@ param frontendAppName string = 'frontend-${uniqueString(resourceGroup().id)}'
 @description('Name of the cosmos DB account.')
 param cosmosAccountName string = 'cosmos-${uniqueString(resourceGroup().id)}'
 
+@description('Azure AD instance for backend api security.')
+param azureAdInstance string
+
+@description('Client ID of the app registration of the backend app.')
+param azureAdClientId string
+
+@description('Tenant ID.')
+param azureAdTenantId string 
+
 var cosmosDatabaseName = 'history'
 var cosmosDocumentContainerName = 'documentsperthread'
 var cosmosHistoryContainerName = 'threadhistory'
 var sqlRoleName = 'sql-contributor-${cosmosAccountName}'
 
-module appServicePlan 'br/public:avm/res/web/serverfarm:0.3.0' = {
-  name: 'appServicePlan'
-  params: {
-    name: aspName
-    location: resourceGroup().location
-    skuName: 'B1'
-  }
-}
 
-module backendSite 'br/public:avm/res/web/site:0.9.0' = {
-  name: 'backendSite'
+module backendUserAssignedIdentity 'br/public:avm/res/managed-identity/user-assigned-identity:0.4.0' = {
+  name: 'backendUserAssignedIdentity'
   params: {
-    kind: 'app'
-    name: backendAppName
-    serverFarmResourceId: appServicePlan.outputs.resourceId
+    name: '${backendAppName}-identity'
     location: resourceGroup().location
-    managedIdentities: {
-      systemAssigned: true
-    }
-  }
-}
-
-module frontendSite 'br/public:avm/res/web/site:0.9.0' = {
-  name: 'frontendSite'
-  params: {
-    kind: 'app'
-    name: frontendAppName
-    serverFarmResourceId: appServicePlan.outputs.resourceId
-    location: resourceGroup().location
-    siteConfig: {
-      appSettings: [
-      ]
-    }
   }
 }
 
@@ -91,7 +73,7 @@ module aiSearch 'br/public:avm/res/search/search-service:0.7.1' = {
     partitionCount: 1
     roleAssignments: [
       {
-        principalId: backendSite.outputs.systemAssignedMIPrincipalId
+        principalId: backendUserAssignedIdentity.outputs.principalId
         principalType: 'ServicePrincipal'
         roleDefinitionIdOrName: 'Search Index Data Contributor'
       }
@@ -123,7 +105,7 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.9.1' = {
               roleDefinitionIdOrName: 'Storage Blob Data Reader'
             }
             {
-              principalId: backendSite.outputs.systemAssignedMIPrincipalId
+              principalId: backendUserAssignedIdentity.outputs.principalId
               principalType: 'ServicePrincipal'
               roleDefinitionIdOrName: 'Storage Blob Data Contributor'
             }
@@ -166,7 +148,7 @@ module openAi './modules/cognitiveservices/cognitive-services.bicep' = {
     ]
     roleAssignmentPrincipalIds: [
       aiSearch.outputs.systemAssignedMIPrincipalId
-      backendSite.outputs.systemAssignedMIPrincipalId
+      backendUserAssignedIdentity.outputs.principalId
     ]
   }
 }
@@ -190,6 +172,11 @@ module cosmosDB 'br/public:avm/res/document-db/database-account:0.8.0' = {
   params: {
     name: cosmosAccountName
     location: resourceGroup().location
+    networkRestrictions: {
+      publicNetworkAccess: 'Enabled'
+      ipRules: []
+      virtualNetworkRules: []
+    }
     sqlDatabases: [
       {
         name: cosmosDatabaseName
@@ -216,7 +203,7 @@ module cosmosDB 'br/public:avm/res/document-db/database-account:0.8.0' = {
       }
     ]
     sqlRoleAssignmentsPrincipalIds: [
-      backendSite.outputs.systemAssignedMIPrincipalId
+      backendUserAssignedIdentity.outputs.principalId
     ]
     sqlRoleDefinitions: [
       {
@@ -231,5 +218,57 @@ module cosmosDB 'br/public:avm/res/document-db/database-account:0.8.0' = {
   }
 }
 
+module appServicePlan 'br/public:avm/res/web/serverfarm:0.3.0' = {
+  name: 'appServicePlan'
+  params: {
+    name: aspName
+    location: resourceGroup().location
+    skuName: 'B1'
+  }
+}
+
+module frontendSite 'br/public:avm/res/web/site:0.9.0' = {
+  name: 'frontendSite'
+  params: {
+    kind: 'app'
+    name: frontendAppName
+    serverFarmResourceId: appServicePlan.outputs.resourceId
+    location: resourceGroup().location
+  }
+}
+
+module backendSite 'br/public:avm/res/web/site:0.9.0' = {
+  name: 'backendSite'
+  params: {
+    kind: 'app'
+    name: backendAppName
+    serverFarmResourceId: appServicePlan.outputs.resourceId
+    location: resourceGroup().location
+    managedIdentities: {
+      userAssignedResourceIds: [
+        backendUserAssignedIdentity.outputs.resourceId
+      ]
+    }
+    appSettingsKeyValuePairs: {
+      Storage: '{ "ServiceUri": "${storageAccount.outputs.primaryBlobEndpoint}", "AccountName": "${storageAccount.outputs.name}","ContainerName": "${blobStorageContainerName}" }'
+      Cosmos: '{ "AccountEndpoint": "${cosmosDB.outputs.endpoint}", "DatabaseName": "${cosmosDatabaseName}", "ContainerName": "${cosmosDocumentContainerName}", "ThreadHistoryContainerName": "${cosmosHistoryContainerName}" }'
+      Search: '{ "EndPoint": "https://${aiSearch.outputs.name}.search.windows.net", "IndexName": "${indexName}", "IndexerName": "${indexName}-indexer", "DataSourceName": "${indexName}-datasource" }'
+      OpenAI: '{ "EndPoint": "${openAi.outputs.endpoint}", "EmbeddingModel": "${integratedVectorEmbeddingModelId}", "CompletionModel": "${completionModelName}" }'
+      AzureAd: '{ "Instance": "${azureAdInstance}", "ClientId": "${azureAdClientId}","TenantId": "${azureAdTenantId}" }'
+    }
+    siteConfig: {
+      cors: {
+        allowedOrigins: [
+          'https://${frontendSite.outputs.defaultHostname}'
+        ]
+        supportCredentials: true
+      }
+    }
+  }
+}
+
 output aiSearchName string = aiSearch.outputs.name
 output indexerName string = aiSearchIndex.outputs.indexerName
+output backendAppName string = backendSite.outputs.name
+output backendAppUrl string = 'https://${backendSite.outputs.defaultHostname}'
+output frontendAppName string = frontendSite.outputs.name

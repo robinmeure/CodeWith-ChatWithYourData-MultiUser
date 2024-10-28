@@ -8,16 +8,11 @@ using Infrastructure;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Azure;
 using Microsoft.SemanticKernel;
-using Microsoft.Extensions.VectorData;
 using Microsoft.SemanticKernel.Data;
 using Microsoft.SemanticKernel.Connectors.AzureAISearch;
-using Microsoft.SemanticKernel.Connectors.OpenAI;
 using Microsoft.SemanticKernel.Connectors.AzureOpenAI;
-using Newtonsoft.Json;
-using System.Text.Json.Serialization;
 using DocApi.Utils;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
 using Microsoft.Identity.Web;
 
 namespace DocApi
@@ -64,6 +59,7 @@ namespace DocApi
                 });
             }
 
+            // AI Search.
             var searchConfig = builder.Configuration.GetSection("Search");
             if (searchConfig != null)
             {
@@ -82,19 +78,17 @@ namespace DocApi
                 string endpoint = openAIConfig["EndPoint"];
                 string completionModel = openAIConfig["CompletionModel"];
                 string embeddingModel = openAIConfig["EmbeddingModel"];
-                string key = openAIConfig["Key"];
-                string searchUri = searchConfig["EndPoint"];
-                string searchKey = searchConfig["ApiKey"];
+                Uri serviceUri = new Uri(searchConfig["EndPoint"]);
                 
                 var kernelBuilder = Kernel.CreateBuilder();
-                kernelBuilder.AddAzureOpenAIChatCompletion(completionModel, endpoint, key);
+                kernelBuilder.AddAzureOpenAIChatCompletion(completionModel, endpoint, azureCredential);
                 var kernel = kernelBuilder.Build();
                 builder.Services.AddSingleton(kernel);
                 builder.Services.AddSingleton(new PromptHelper(kernel));
 
                 // Search
-                var embedding = new AzureOpenAITextEmbeddingGenerationService(embeddingModel, endpoint, key);
-                var collection = new AzureAISearchVectorStoreRecordCollection<IndexDoc>(new SearchIndexClient(new Uri(searchUri), new AzureKeyCredential(searchKey)), "onyourdata");               
+                var embedding = new AzureOpenAITextEmbeddingGenerationService(embeddingModel, endpoint, azureCredential);
+                var collection = new AzureAISearchVectorStoreRecordCollection<IndexDoc>(new SearchIndexClient(serviceUri, azureCredential), "onyourdata");               
                 builder.Services.AddSingleton(new VectorStoreTextSearch<IndexDoc>(collection, embedding));
             }
 
@@ -133,13 +127,7 @@ namespace DocApi
                                   .AllowCredentials());
             });
 
-            // Auth.
-            var authConfig = builder.Configuration.GetSection("AuthConfig");
-            var audience = authConfig["Audience"];
-            var issuer = authConfig["Issuer"];
-            var scope = authConfig["ChatScope"];
-
-
+            // Auth
             builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("AzureAd"));
 
 

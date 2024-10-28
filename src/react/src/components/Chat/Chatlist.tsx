@@ -60,7 +60,7 @@ export function Chatlist({ chats, selectedChatId, selectChat, addChat, deleteCha
                 <Button onClick={() => selectChat()} size="large" icon={<Home24Regular />} />
                 <Button onClick={() => addChat()} size="large" icon={<Add24Regular />} />
             </div>
-            <Text className={classes.listHeaderText}>{process.env.VITE_BACKEND_URL}</Text>
+            <Text className={classes.listHeaderText}>My chats</Text>
             <div className={classes.scrollContainer}>
                 {loading && (
                     <ListSkeleton />
