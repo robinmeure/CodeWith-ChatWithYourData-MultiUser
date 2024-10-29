@@ -12,8 +12,9 @@ using System.Xml.Linq;
 
 namespace DocApi.Controllers
 {
+    [Authorize]
     [ApiController]
-    [Route("/chats/{threadId}")]
+    [Route("/threads/{threadId}/documents")]
     public class DocumentController : ControllerBase
     {
         private readonly IDocumentStore _documentStore;
@@ -48,7 +49,7 @@ namespace DocApi.Controllers
 
         }
 
-        [HttpGet(Name = "GetMyDocuments")]
+        [HttpGet()]
         public async Task<IEnumerable<DocsPerThread>> Get([FromRoute] string threadId)
         {
             _logger.LogInformation("Fetching documents from CosmosDb for threadId : {0}", threadId);
@@ -66,7 +67,7 @@ namespace DocApi.Controllers
             return await _searchService.IsChunkingComplete(documents);
         }
 
-        [HttpPost("upload", Name = "Upload")]
+        [HttpPost()]
         public async Task<IActionResult> UploadDocuments(List<IFormFile> documents, string userId, [FromRoute] string threadId)
         {
             if (documents == null || !documents.Any())
@@ -123,7 +124,7 @@ namespace DocApi.Controllers
             return Ok();
         }
 
-        [HttpPost("delete/{documentId}", Name = "DeleteDocumentFromThread")]
+        [HttpDelete("{documentId}", Name = "DeleteDocumentFromThread")]
         public async Task<IActionResult> RemoveDocumentAsync([FromRoute] string threadId, string documentId)
         {
             _logger.LogInformation("Fetching documents from CosmosDb for threadId {0} and documentId {1}", threadId, documentId);
@@ -147,7 +148,7 @@ namespace DocApi.Controllers
             return NotFound();
         }
 
-        [HttpPost("delete", Name = "DeleteDocument")]
+        [HttpDelete("", Name = "DeleteDocument")]
         public async Task<IActionResult> RemoveDocumentFromThreadAsync([FromRoute] string threadId)
         {
             _logger.LogInformation("Fetching documents from CosmosDb for threadId : {0}", threadId);
