@@ -24,6 +24,20 @@ To deploy the infra, create a resource group in Azure. In this repository, open 
 az deployment group create --template-file main.bicep -g "YOUR-RESOURCE-GROUP-NAME"
 ```
 
+This will ask you to provide three values, which are all used by the back-end app service to secure the exposed APIs:
+
+|Input| Description |
+|---|---|
+|azureAdInstance| https://login.microsoftonline.com/ |
+|azureAdClientId| Client id of the back-end app registration. |
+|azureAdTenantId|  Tenant id of the Entra ID tenant. |
+
+### Setting up end-user auth
+The next step is to allow users to sign in to the front end app. For that, the redirect URI needs to be known, so this can only be done after deploying the infra. To do that, add the following in the front end app registration:
+- Add a redirect URI for a single page application.
+- As URI, put the base URL of the front-end app (e.g. https://frontend-{someid}.azurewebsites.net/)
+- Enable access token and ID token flows.
+
 ### Deploy the apps
 After deploying the infra, you can deploy the backend and frontend by going to the deploy directory and running the below command.
 
@@ -32,7 +46,7 @@ After deploying the infra, you can deploy the backend and frontend by going to t
 ```
 
 This will ask for the following variables:
-|---|---|
+
 |Input| Description |
 |---|---|
 |rgName| Name of the resource group |
@@ -43,12 +57,8 @@ This will ask for the following variables:
 |publicAppId|  Id of the front end app registration. |
 |publicAuthorityUrl|  Authority URL of the front end app registration (e.g. https://login.microsoftonline.com/{tenant-id}) |
 
+After deploying the apps, you can access the front-end app to start chatting on your documents.
 
-### Finishing end-user auth
-The final step is to allow users to sign in to the front end app. To do that, add the following in the front end app registration:
-- Add a redirect URI for a single page application.
-- As URI, put the base URL of the front-end app (e.g. https://frontend-{someid}.azurewebsites.net/)
-- Enable access token and ID token flows.
 
 ## Contributing
 

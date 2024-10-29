@@ -52,11 +52,43 @@ var cosmosHistoryContainerName = 'threadhistory'
 var sqlRoleName = 'sql-contributor-${cosmosAccountName}'
 
 
-module backendUserAssignedIdentity 'br/public:avm/res/managed-identity/user-assigned-identity:0.4.0' = {
-  name: 'backendUserAssignedIdentity'
+module appServicePlan 'br/public:avm/res/web/serverfarm:0.3.0' = {
+  name: 'appServicePlan'
   params: {
-    name: '${backendAppName}-identity'
+    name: aspName
     location: resourceGroup().location
+    skuName: 'B1'
+  }
+}
+
+module frontendSite 'br/public:avm/res/web/site:0.9.0' = {
+  name: 'frontendSite'
+  params: {
+    kind: 'app'
+    name: frontendAppName
+    serverFarmResourceId: appServicePlan.outputs.resourceId
+    location: resourceGroup().location
+  }
+}
+
+module backendSite 'br/public:avm/res/web/site:0.9.0' = {
+  name: 'backendSite'
+  params: {
+    kind: 'app'
+    name: backendAppName
+    serverFarmResourceId: appServicePlan.outputs.resourceId
+    location: resourceGroup().location
+    managedIdentities: {
+      systemAssigned: true
+    }
+    siteConfig: {
+      cors: {
+        allowedOrigins: [
+          'https://${frontendSite.outputs.defaultHostname}'
+        ]
+        supportCredentials: true
+      }
+    }
   }
 }
 
@@ -73,9 +105,14 @@ module aiSearch 'br/public:avm/res/search/search-service:0.7.1' = {
     partitionCount: 1
     roleAssignments: [
       {
-        principalId: backendUserAssignedIdentity.outputs.principalId
+        principalId: backendSite.outputs.systemAssignedMIPrincipalId
         principalType: 'ServicePrincipal'
         roleDefinitionIdOrName: 'Search Index Data Contributor'
+      }
+      {
+        principalId: backendSite.outputs.systemAssignedMIPrincipalId
+        principalType: 'ServicePrincipal'
+        roleDefinitionIdOrName: 'Search Service Contributor'
       }
     ]
   }
@@ -105,7 +142,7 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.9.1' = {
               roleDefinitionIdOrName: 'Storage Blob Data Reader'
             }
             {
-              principalId: backendUserAssignedIdentity.outputs.principalId
+              principalId: backendSite.outputs.systemAssignedMIPrincipalId
               principalType: 'ServicePrincipal'
               roleDefinitionIdOrName: 'Storage Blob Data Contributor'
             }
@@ -148,7 +185,7 @@ module openAi './modules/cognitiveservices/cognitive-services.bicep' = {
     ]
     roleAssignmentPrincipalIds: [
       aiSearch.outputs.systemAssignedMIPrincipalId
-      backendUserAssignedIdentity.outputs.principalId
+      backendSite.outputs.systemAssignedMIPrincipalId
     ]
   }
 }
@@ -203,7 +240,7 @@ module cosmosDB 'br/public:avm/res/document-db/database-account:0.8.0' = {
       }
     ]
     sqlRoleAssignmentsPrincipalIds: [
-      backendUserAssignedIdentity.outputs.principalId
+      backendSite.outputs.systemAssignedMIPrincipalId
     ]
     sqlRoleDefinitions: [
       {
@@ -218,54 +255,36 @@ module cosmosDB 'br/public:avm/res/document-db/database-account:0.8.0' = {
   }
 }
 
-module appServicePlan 'br/public:avm/res/web/serverfarm:0.3.0' = {
-  name: 'appServicePlan'
-  params: {
-    name: aspName
-    location: resourceGroup().location
-    skuName: 'B1'
+resource existingBackend 'Microsoft.Web/sites@2023-12-01' existing = {
+  name: backendAppName
+  scope: resourceGroup()
+}
+
+resource backendAppSettings 'Microsoft.Web/sites/config@2022-09-01' = {
+  name: 'appsettings'
+  kind: 'string'
+  parent: existingBackend
+  properties: {
+    'AzureAd:Instance': azureAdInstance
+    'AzureAd:ClientId': azureAdClientId
+    'AzureAd:TenantId': azureAdTenantId
+    'Storage:ServiceUri': storageAccount.outputs.primaryBlobEndpoint
+    'Storage:AccountName': storageAccount.outputs.name
+    'Storage:ContainerName': blobStorageContainerName
+    'Cosmos:AccountEndpoint': cosmosDB.outputs.endpoint
+    'Cosmos:DatabaseName': cosmosDatabaseName
+    'Cosmos:ContainerName': cosmosDocumentContainerName
+    'Cosmos:ThreadHistoryContainerName': cosmosHistoryContainerName
+    'Search:EndPoint': 'https://${aiSearch.outputs.name}.search.windows.net'
+    'Search:IndexName': indexName
+    'Search:IndexerName': '${indexName}-indexer'
+    'Search:DataSourceName': '${indexName}-datasource'
+    'OpenAI:EndPoint': openAi.outputs.endpoint
+    'OpenAI:EmbeddingModel': integratedVectorEmbeddingModelId
+    'OpenAI:CompletionModel': completionModelName
   }
 }
 
-module frontendSite 'br/public:avm/res/web/site:0.9.0' = {
-  name: 'frontendSite'
-  params: {
-    kind: 'app'
-    name: frontendAppName
-    serverFarmResourceId: appServicePlan.outputs.resourceId
-    location: resourceGroup().location
-  }
-}
-
-module backendSite 'br/public:avm/res/web/site:0.9.0' = {
-  name: 'backendSite'
-  params: {
-    kind: 'app'
-    name: backendAppName
-    serverFarmResourceId: appServicePlan.outputs.resourceId
-    location: resourceGroup().location
-    managedIdentities: {
-      userAssignedResourceIds: [
-        backendUserAssignedIdentity.outputs.resourceId
-      ]
-    }
-    appSettingsKeyValuePairs: {
-      Storage: '{ "ServiceUri": "${storageAccount.outputs.primaryBlobEndpoint}", "AccountName": "${storageAccount.outputs.name}","ContainerName": "${blobStorageContainerName}" }'
-      Cosmos: '{ "AccountEndpoint": "${cosmosDB.outputs.endpoint}", "DatabaseName": "${cosmosDatabaseName}", "ContainerName": "${cosmosDocumentContainerName}", "ThreadHistoryContainerName": "${cosmosHistoryContainerName}" }'
-      Search: '{ "EndPoint": "https://${aiSearch.outputs.name}.search.windows.net", "IndexName": "${indexName}", "IndexerName": "${indexName}-indexer", "DataSourceName": "${indexName}-datasource" }'
-      OpenAI: '{ "EndPoint": "${openAi.outputs.endpoint}", "EmbeddingModel": "${integratedVectorEmbeddingModelId}", "CompletionModel": "${completionModelName}" }'
-      AzureAd: '{ "Instance": "${azureAdInstance}", "ClientId": "${azureAdClientId}","TenantId": "${azureAdTenantId}" }'
-    }
-    siteConfig: {
-      cors: {
-        allowedOrigins: [
-          'https://${frontendSite.outputs.defaultHostname}'
-        ]
-        supportCredentials: true
-      }
-    }
-  }
-}
 
 output aiSearchName string = aiSearch.outputs.name
 output indexerName string = aiSearchIndex.outputs.indexerName
