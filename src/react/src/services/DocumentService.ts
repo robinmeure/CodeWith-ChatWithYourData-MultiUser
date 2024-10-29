@@ -6,7 +6,7 @@ export class DocumentService {
 
     public getDocumentsAsync = async (chatId: string): Promise<IDocument[]> => {
         try {
-            const response = await fetch(`${this.baseUrl}/chats/${chatId}/Document`);
+            const response = await fetch(`${this.baseUrl}/threads/${chatId}/documents`);
             if (!response.ok) {
                 throw new Error(`Error fetching chat: ${response.statusText}`);
             }
@@ -31,7 +31,7 @@ export class DocumentService {
         });
 
         try {
-            const response = await fetch(`${this.baseUrl}/chats/${chatId}/Document/upload?userId=${userId}`, {
+            const response = await fetch(`${this.baseUrl}/threads/${chatId}/documents?userId=${userId}`, {
                 method: 'POST',
                 body: formData
             });
@@ -48,8 +48,8 @@ export class DocumentService {
     public deleteDocumentAsync = async ({chatId, documentId} : {chatId: string, documentId: string}): Promise<boolean> => {
         
         try {
-            const response = await fetch(`${this.baseUrl}/chats/${chatId}/Document/delete/${documentId}`, {
-                method: 'POST',
+            const response = await fetch(`${this.baseUrl}/threads/${chatId}/documents/${documentId}`, {
+                method: 'DELETE',
                 headers: {
                     'Content-Type': 'application/json',
                 }
