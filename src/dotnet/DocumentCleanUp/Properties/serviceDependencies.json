@@ -12,8 +12,7 @@
     },
     "cosmosdb1": {
       "type": "cosmosdb",
-      "connectionId": "CosmosDbConnection",
-      "dynamicId": null
+      "connectionId": "CosmosDbConnection"
     }
   }
 }

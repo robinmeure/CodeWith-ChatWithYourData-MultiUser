@@ -37,7 +37,6 @@ var host = new HostBuilder()
             clientBuilder.UseCredential(azureCredential);
         });
 
-
         services.AddSingleton(sp =>
         {
             string accountEndpoint = config["Cosmos:AccountEndpoint"];

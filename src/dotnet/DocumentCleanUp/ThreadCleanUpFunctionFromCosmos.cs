@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using DocumentCleanUp.Helpers;
 using Domain;
 using Infrastructure;
+using Microsoft.Azure.Cosmos;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -14,30 +16,27 @@ public class ThreadCleanUpFunctionFromCosmos
     private readonly ILogger _logger;
     private IConfiguration _config;
     private ThreadCleanup _threadCleanup;
-    private static string _cosmosDbDatabaseName = string.Empty;
-    private static string _cosmosDbContainerName = string.Empty;
-    private static string _storageContainerName = string.Empty;
+    private CosmosClient _cosmosClient;
 
     public ThreadCleanUpFunctionFromCosmos(
         ILoggerFactory loggerFactory,
         IConfiguration config,
+        CosmosClient cosmosClient,
         ThreadCleanup threadCleanup
         )
     {
+        _cosmosClient = cosmosClient;
         _threadCleanup = threadCleanup;
         _logger = loggerFactory.CreateLogger<DocumentCleanUpFunction>();
         _config = config;
-        _cosmosDbDatabaseName = _config["Cosmos:DatabaseName"] ?? throw new ArgumentNullException("Cosmos:DatabaseName");
-        _cosmosDbContainerName = _config["Cosmos:Container"] ?? throw new ArgumentNullException("Cosmos:Container");
-        _storageContainerName = _config["Storage:ContainerName"] ?? throw new ArgumentNullException("Storage:ContainerName");
     }
 
-    [Function("DocumentCleanUp")]
+    [Function("ThreadCleanUpFromCosmos")]
     public async Task Run([CosmosDBTrigger(
-        databaseName: "%CosmosDbDatabaseName%",
-        containerName: "%CosmosDbContainerName%",
-        Connection = "CosmosDbConnection",
-        LeaseContainerName = "%CosmosDbLeaseContainer%",
+        databaseName: Constants.COSMOS_THREADS_DATABASE_NAME,
+        containerName: Constants.COSMOS_THREADS_CONTAINER_NAME,
+        Connection = "CosmosDbConnection", // this points to a local secret.. not sure if this is the right way to do it
+        LeaseContainerName = Constants.COSMOS_THREAD_LEASE_CONTAINER_NAME,
         CreateLeaseContainerIfNotExists = false)] IReadOnlyList<Thread> threads)
     {
         _logger.LogInformation($"CosmosDbTrigger found {threads.Count} threads which are soft-deleted.");

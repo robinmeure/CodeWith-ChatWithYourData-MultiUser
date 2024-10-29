@@ -12,7 +12,7 @@ using System.Xml.Linq;
 
 namespace DocApi.Controllers
 {
-    [Authorize]
+    //[Authorize]
     [ApiController]
     [Route("/threads/{threadId}/documents")]
     public class DocumentController : ControllerBase
