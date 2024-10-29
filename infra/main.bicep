@@ -37,10 +37,20 @@ param frontendAppName string = 'frontend-${uniqueString(resourceGroup().id)}'
 @description('Name of the cosmos DB account.')
 param cosmosAccountName string = 'cosmos-${uniqueString(resourceGroup().id)}'
 
+@description('Azure AD instance for backend api security.')
+param azureAdInstance string
+
+@description('Client ID of the app registration of the backend app.')
+param azureAdClientId string
+
+@description('Tenant ID.')
+param azureAdTenantId string 
+
 var cosmosDatabaseName = 'history'
 var cosmosDocumentContainerName = 'documentsperthread'
 var cosmosHistoryContainerName = 'threadhistory'
 var sqlRoleName = 'sql-contributor-${cosmosAccountName}'
+
 
 module appServicePlan 'br/public:avm/res/web/serverfarm:0.3.0' = {
   name: 'appServicePlan'
@@ -48,6 +58,16 @@ module appServicePlan 'br/public:avm/res/web/serverfarm:0.3.0' = {
     name: aspName
     location: resourceGroup().location
     skuName: 'B1'
+  }
+}
+
+module frontendSite 'br/public:avm/res/web/site:0.9.0' = {
+  name: 'frontendSite'
+  params: {
+    kind: 'app'
+    name: frontendAppName
+    serverFarmResourceId: appServicePlan.outputs.resourceId
+    location: resourceGroup().location
   }
 }
 
@@ -61,19 +81,13 @@ module backendSite 'br/public:avm/res/web/site:0.9.0' = {
     managedIdentities: {
       systemAssigned: true
     }
-  }
-}
-
-module frontendSite 'br/public:avm/res/web/site:0.9.0' = {
-  name: 'frontendSite'
-  params: {
-    kind: 'app'
-    name: frontendAppName
-    serverFarmResourceId: appServicePlan.outputs.resourceId
-    location: resourceGroup().location
     siteConfig: {
-      appSettings: [
-      ]
+      cors: {
+        allowedOrigins: [
+          'https://${frontendSite.outputs.defaultHostname}'
+        ]
+        supportCredentials: true
+      }
     }
   }
 }
@@ -94,6 +108,11 @@ module aiSearch 'br/public:avm/res/search/search-service:0.7.1' = {
         principalId: backendSite.outputs.systemAssignedMIPrincipalId
         principalType: 'ServicePrincipal'
         roleDefinitionIdOrName: 'Search Index Data Contributor'
+      }
+      {
+        principalId: backendSite.outputs.systemAssignedMIPrincipalId
+        principalType: 'ServicePrincipal'
+        roleDefinitionIdOrName: 'Search Service Contributor'
       }
     ]
   }
@@ -190,6 +209,11 @@ module cosmosDB 'br/public:avm/res/document-db/database-account:0.8.0' = {
   params: {
     name: cosmosAccountName
     location: resourceGroup().location
+    networkRestrictions: {
+      publicNetworkAccess: 'Enabled'
+      ipRules: []
+      virtualNetworkRules: []
+    }
     sqlDatabases: [
       {
         name: cosmosDatabaseName
@@ -231,5 +255,39 @@ module cosmosDB 'br/public:avm/res/document-db/database-account:0.8.0' = {
   }
 }
 
+resource existingBackend 'Microsoft.Web/sites@2023-12-01' existing = {
+  name: backendAppName
+  scope: resourceGroup()
+}
+
+resource backendAppSettings 'Microsoft.Web/sites/config@2022-09-01' = {
+  name: 'appsettings'
+  kind: 'string'
+  parent: existingBackend
+  properties: {
+    'AzureAd:Instance': azureAdInstance
+    'AzureAd:ClientId': azureAdClientId
+    'AzureAd:TenantId': azureAdTenantId
+    'Storage:ServiceUri': storageAccount.outputs.primaryBlobEndpoint
+    'Storage:AccountName': storageAccount.outputs.name
+    'Storage:ContainerName': blobStorageContainerName
+    'Cosmos:AccountEndpoint': cosmosDB.outputs.endpoint
+    'Cosmos:DatabaseName': cosmosDatabaseName
+    'Cosmos:ContainerName': cosmosDocumentContainerName
+    'Cosmos:ThreadHistoryContainerName': cosmosHistoryContainerName
+    'Search:EndPoint': 'https://${aiSearch.outputs.name}.search.windows.net'
+    'Search:IndexName': indexName
+    'Search:IndexerName': '${indexName}-indexer'
+    'Search:DataSourceName': '${indexName}-datasource'
+    'OpenAI:EndPoint': openAi.outputs.endpoint
+    'OpenAI:EmbeddingModel': integratedVectorEmbeddingModelId
+    'OpenAI:CompletionModel': completionModelName
+  }
+}
+
+
 output aiSearchName string = aiSearch.outputs.name
 output indexerName string = aiSearchIndex.outputs.indexerName
+output backendAppName string = backendSite.outputs.name
+output backendAppUrl string = 'https://${backendSite.outputs.defaultHostname}'
+output frontendAppName string = frontendSite.outputs.name

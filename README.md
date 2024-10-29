@@ -1,14 +1,64 @@
 # Project
 
-> This repo has been populated by an initial template to help get you started. Please
-> make sure to update the content to build a great experience for community-building.
+## How to deploy
 
-As the maintainer of this project, please make a few updates:
+### Register front-end and back-end applications
+For API permissions, the solution requires you to register the front-end and back-end applications in Entra ID.
 
-- Improving this README.MD file to provide a great experience
-- Updating SUPPORT.MD with content about this project's support experience
-- Understanding the security reporting process in SECURITY.MD
-- Remove this section from the README
+#### Back-end
+The back-end app registration should expose an API with custom permissions, to do this, go to the app registration -> expose an API. Here you can configure a custom scope for the back-end API (e.g. "chat").
+Save the value of the scope for later use.
+
+#### Front-end
+The front-end app registration should have permissions to consume the above API. In API permissions, add the following:
+- offline_access
+- openid
+- User.Read
+- The custom API you exposed above.
+The first three are for logging in, the last one is for consuming the backend api.
+
+### Deploy infra
+To deploy the infra, create a resource group in Azure. In this repository, open the infra folder and run the below command:
+
+```
+az deployment group create --template-file main.bicep -g "YOUR-RESOURCE-GROUP-NAME"
+```
+
+This will ask you to provide three values, which are all used by the back-end app service to secure the exposed APIs:
+
+|Input| Description |
+|---|---|
+|azureAdInstance| https://login.microsoftonline.com/ |
+|azureAdClientId| Client id of the back-end app registration. |
+|azureAdTenantId|  Tenant id of the Entra ID tenant. |
+
+### Setting up end-user auth
+The next step is to allow users to sign in to the front end app. For that, the redirect URI needs to be known, so this can only be done after deploying the infra. To do that, add the following in the front end app registration:
+- Add a redirect URI for a single page application.
+- As URI, put the base URL of the front-end app (e.g. https://frontend-{someid}.azurewebsites.net/)
+- Enable access token and ID token flows.
+
+### Deploy the apps
+After deploying the infra, you can deploy the backend and frontend by going to the deploy directory and running the below command.
+
+```
+.\deploy.ps1
+```
+
+This will ask for the following variables:
+
+|Input| Description |
+|---|---|
+|rgName| Name of the resource group |
+|frontEndAppServiceName| Name of the front end app, this will be outputted by the bicep. |
+|backEndAppServiceName|  Name of the back end app, this will be outputted by the bicep. |
+|backendUrl|  Url of the back end app, this will be outputted by the bicep. |
+|backendApiScope|  Scope for the back end API that you created in step 1. |
+|publicAppId|  Id of the front end app registration. |
+|publicAuthorityUrl|  Authority URL of the front end app registration (e.g. https://login.microsoftonline.com/{tenant-id}) |
+
+After deploying the apps, you can access the front-end app to start chatting on your documents.
+
 
 ## Contributing
 
