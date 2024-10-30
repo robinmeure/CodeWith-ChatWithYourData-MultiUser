@@ -23,7 +23,7 @@ export class DocumentService {
         }
     };
 
-    public addDocumentsAsync = async ({ chatId, userId, documents, token }: { chatId: string, userId: string, documents: File[], token: string }): Promise<boolean> => {
+    public addDocumentsAsync = async ({ chatId, documents, token }: { chatId: string, documents: File[], token: string }): Promise<boolean> => {
 
         if (!chatId || !Array.isArray(documents) || documents.length === 0) {
             console.log('No chat or documents to upload');
@@ -35,7 +35,7 @@ export class DocumentService {
         });
 
         try {
-            const response = await fetch(`${this.baseUrl}/threads/${chatId}/documents?userId=${userId}`, {
+            const response = await fetch(`${this.baseUrl}/threads/${chatId}/documents`, {
                 method: 'POST',
                 body: formData,
                 headers: {

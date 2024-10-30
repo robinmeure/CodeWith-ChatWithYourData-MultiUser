@@ -26,7 +26,7 @@ export const useChatDocuments = (chatId: string | undefined) => {
     }, [ documentData]);
 
     const { mutateAsync: addDocuments} = useMutation({
-        mutationFn: ({chatId, documents} : {chatId: string, documents: File[]}) => documentService.addDocumentsAsync({chatId, userId, documents, token: accessToken}),
+        mutationFn: ({chatId, documents} : {chatId: string, documents: File[]}) => documentService.addDocumentsAsync({chatId, documents, token: accessToken}),
         onError: () => {
             console.log('Failed to upload a document.');
         },
