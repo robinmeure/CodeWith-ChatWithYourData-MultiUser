@@ -17,6 +17,12 @@ namespace Domain
         [JsonProperty(PropertyName = "documentName")]
         public required string DocumentName { get; set; }
 
+        [JsonProperty(PropertyName = "fileSize")]
+        public required long FileSize{ get; set; }
+
+        [JsonProperty(PropertyName = "uploadDate")]
+        public required DateTime UploadDate { get; set; }
+
         [JsonProperty(PropertyName = "deleted")]
         public bool Deleted { get; set; } = false;
 
