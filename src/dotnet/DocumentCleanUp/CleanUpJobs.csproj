@@ -8,6 +8,10 @@
     <UserSecretsId>cb0a1ad5-b88a-4241-a9d3-457a3216017e</UserSecretsId>
   </PropertyGroup>
   <ItemGroup>
+    <None Remove="example.settings.json" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="example.settings.json" />
     <Content Include="local.settings.json" />
   </ItemGroup>
   <ItemGroup>

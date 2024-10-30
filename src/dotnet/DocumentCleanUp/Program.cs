@@ -31,7 +31,16 @@ var host = new HostBuilder()
            clientBuilder.UseCredential(azureCredential);
        });
 
-       services.AddSingleton(sp =>
+       Uri serviceUri = new Uri(hostContext.Configuration["SearchEndPoint"]);
+       string indexName = hostContext.Configuration["SearchIndexName"];
+
+       services.AddSingleton(sp => new SearchClient(serviceUri, indexName, azureCredential));
+       services.AddSingleton(sp => new SearchIndexClient(serviceUri, azureCredential));
+       services.AddSingleton(sp => new SearchIndexerClient(serviceUri, azureCredential));
+
+       services.AddSingleton<ISearchService, AISearchService>();
+       services.AddSingleton<IDocumentStore, BlobDocumentStore>();
+       services.AddSingleton<IDocumentRegistry>(sp =>
        {
            string accountEndpoint = hostContext.Configuration["MyCosmosConnection"];
            string cosmosDBDatabase = hostContext.Configuration["CosmosDbDatabase"];
@@ -46,19 +55,9 @@ var host = new HostBuilder()
 
            var client = new CosmosClient(accountEndpoint, azureCredential, cosmosClientOptions);
            var database = client.GetDatabase(cosmosDBDatabase);
-           return database.GetContainer(cosmosDBContainer);
+           var container = database.GetContainer(cosmosDBContainer);
+           return new CosmosDocumentRegistry(container);
        });
-       Uri serviceUri = new Uri(hostContext.Configuration["SearchEndPoint"]);
-       string indexName = hostContext.Configuration["SearchIndexName"];
-
-       services.AddSingleton(sp => new SearchClient(serviceUri, indexName, azureCredential));
-       services.AddSingleton(sp => new SearchIndexClient(serviceUri, azureCredential));
-       services.AddSingleton(sp => new SearchIndexerClient(serviceUri, azureCredential));
-
-       
-       services.AddSingleton<ISearchService, AISearchService>();
-       services.AddSingleton<IDocumentStore, BlobDocumentStore>();
-       services.AddSingleton<IDocumentRegistry, CosmosDocumentRegistry>();
        services.AddSingleton<IThreadRepository>(sp =>
        {
            string accountEndpoint = hostContext.Configuration["MyCosmosConnection"];
