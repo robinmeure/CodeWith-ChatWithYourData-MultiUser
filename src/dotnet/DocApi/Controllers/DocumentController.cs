@@ -7,14 +7,16 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Identity.Client;
+using Microsoft.Identity.Web.Resource;
 using System.Reflection.Metadata;
 using System.Xml.Linq;
 
 namespace DocApi.Controllers
 {
+    [Route("/threads/{threadId}/documents")]
     [Authorize]
     [ApiController]
-    [Route("/threads/{threadId}/documents")]
+    [RequiredScope("chat")]
     public class DocumentController : ControllerBase
     {
         private readonly IDocumentStore _documentStore;

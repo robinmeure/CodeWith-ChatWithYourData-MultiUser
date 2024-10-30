@@ -8,15 +8,15 @@ export const useChatDocuments = (chatId: string | undefined) => {
 
     const queryClient = useQueryClient();
     const documentService = new DocumentService();
-    const {userId } = useAuth();   
+    const {userId, accessToken } = useAuth();   
 
 
     const [documents, setDocuments] = useState<IDocument[]>([]);
 
     const { isPending: documentsPending, error: documentsError, data: documentData } = useQuery({
         queryKey: ['documents', chatId],
-        queryFn: async () => documentService.getDocumentsAsync(chatId || ""),
-        enabled: chatId != undefined
+        queryFn: async () => documentService.getDocumentsAsync(chatId || "", accessToken),
+        enabled: chatId != undefined && accessToken != undefined && accessToken != ""
     });
 
     useEffect(() => {
@@ -26,7 +26,7 @@ export const useChatDocuments = (chatId: string | undefined) => {
     }, [ documentData]);
 
     const { mutateAsync: addDocuments} = useMutation({
-        mutationFn: ({chatId, documents} : {chatId: string, documents: File[]}) => documentService.addDocumentsAsync({chatId, userId, documents}),
+        mutationFn: ({chatId, documents} : {chatId: string, documents: File[]}) => documentService.addDocumentsAsync({chatId, userId, documents, token: accessToken}),
         onError: () => {
             console.log('Failed to upload a document.');
         },
@@ -36,7 +36,7 @@ export const useChatDocuments = (chatId: string | undefined) => {
     });
 
     const { mutateAsync: deleteDocument } = useMutation({
-        mutationFn: documentService.deleteDocumentAsync,
+        mutationFn: ({chatId, documentId} : {chatId: string, documentId: string}) => documentService.deleteDocumentAsync({chatId, documentId, token: accessToken}),
         onError: () => {
             console.log('Failed to delete a document.');
         },

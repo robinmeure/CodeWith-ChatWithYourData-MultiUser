@@ -14,7 +14,7 @@ export const useChatMessages = (chatId: string | undefined) => {
 
     const { isPending: chatPending, error: chatError, data: messagesResult } = useQuery({
         queryKey: ['chat', chatId],
-        queryFn: async () => chatService.getChatMessagesAsync({chatId: chatId || "", userId: userId, token: accessToken}),
+        queryFn: async () => chatService.getChatMessagesAsync({chatId: chatId || "", token: accessToken}),
         enabled: userId != undefined && accessToken != undefined && accessToken != "" && chatId != "" && chatId != undefined,
         staleTime: 10000
     });
@@ -44,7 +44,7 @@ export const useChatMessages = (chatId: string | undefined) => {
             return updated;
         });
 
-        const response = await chatService.sendMessageAsync({chatId: chatId, message: message, userId: userId, token: accessToken});
+        const response = await chatService.sendMessageAsync({chatId: chatId, message: message, token: accessToken});
         
         if (!response || !response.body) {
             return;

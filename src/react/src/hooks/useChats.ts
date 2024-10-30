@@ -13,12 +13,12 @@ export const useChats = () => {
 
     const { isPending, error, data: chats } = useQuery({
         queryKey: ['chats'],
-        queryFn: async () => chatService.getChatsAsync(userId, accessToken),
+        queryFn: async () => chatService.getChatsAsync(accessToken),
         enabled: userId != undefined && accessToken != undefined && accessToken != "",
     });
 
     const { mutateAsync: addChat} = useMutation({
-        mutationFn: () => chatService.createChatAsync({userId, token: accessToken}),
+        mutationFn: () => chatService.createChatAsync({token: accessToken}),
         onError: () => {
             console.log('Failed to create a chat.');
         },
@@ -29,7 +29,7 @@ export const useChats = () => {
     });
 
     const { mutateAsync: deleteChat} = useMutation({
-        mutationFn: ({chatId} : { chatId: string}) => chatService.deleteChatAsync({chatId, userId, token: accessToken}),
+        mutationFn: ({chatId} : { chatId: string}) => chatService.deleteChatAsync({chatId, token: accessToken}),
         onError: () => {
             console.log('Failed to delete chat.');
         },

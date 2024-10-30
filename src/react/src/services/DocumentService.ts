@@ -4,9 +4,13 @@ export class DocumentService {
 
     private readonly baseUrl = process.env.VITE_BACKEND_URL;
 
-    public getDocumentsAsync = async (chatId: string): Promise<IDocument[]> => {
+    public getDocumentsAsync = async (chatId: string, token: string): Promise<IDocument[]> => {
         try {
-            const response = await fetch(`${this.baseUrl}/threads/${chatId}/documents`);
+            const response = await fetch(`${this.baseUrl}/threads/${chatId}/documents`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
             if (!response.ok) {
                 throw new Error(`Error fetching chat: ${response.statusText}`);
             }
@@ -19,7 +23,7 @@ export class DocumentService {
         }
     };
 
-    public addDocumentsAsync = async ({ chatId, userId, documents }: { chatId: string, userId: string, documents: File[] }): Promise<boolean> => {
+    public addDocumentsAsync = async ({ chatId, userId, documents, token }: { chatId: string, userId: string, documents: File[], token: string }): Promise<boolean> => {
 
         if (!chatId || !Array.isArray(documents) || documents.length === 0) {
             console.log('No chat or documents to upload');
@@ -33,7 +37,10 @@ export class DocumentService {
         try {
             const response = await fetch(`${this.baseUrl}/threads/${chatId}/documents?userId=${userId}`, {
                 method: 'POST',
-                body: formData
+                body: formData,
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
             });
             if (!response.ok) {
                 return false;
@@ -45,13 +52,14 @@ export class DocumentService {
         }
     }
 
-    public deleteDocumentAsync = async ({chatId, documentId} : {chatId: string, documentId: string}): Promise<boolean> => {
+    public deleteDocumentAsync = async ({chatId, documentId, token} : {chatId: string, documentId: string, token: string}): Promise<boolean> => {
         
         try {
             const response = await fetch(`${this.baseUrl}/threads/${chatId}/documents/${documentId}`, {
                 method: 'DELETE',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
                 }
             });
             if (!response.ok) {

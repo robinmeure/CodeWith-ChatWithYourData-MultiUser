@@ -7,7 +7,6 @@ using Microsoft.SemanticKernel.Data;
 using System.Text;
 using DocApi.Utils;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Cors;
 using Microsoft.Identity.Web.Resource;
 
 namespace DocApi.Controllers
@@ -20,7 +19,6 @@ namespace DocApi.Controllers
 
     public class ThreadController : ControllerBase
     {
-        const string scopeRequiredByApi = "chat";
         private readonly IThreadRepository _threadRepository;
         private readonly ILogger<ThreadController> _logger;
         private readonly IConfiguration _configuration;
@@ -30,7 +28,6 @@ namespace DocApi.Controllers
 
         public class MessageRequest
         {
-            public string UserId { get; set; }
             public string Message { get; set; }
         }
 
@@ -52,19 +49,34 @@ namespace DocApi.Controllers
         }
 
         [HttpGet("")]
-        public async Task<List<Domain.Thread>> GetThreads([FromQuery] string userId)
+        public async Task<IActionResult> GetThreads()
         {
+
+            string userId = HttpContext.User.FindFirst("http://schemas.microsoft.com/identity/claims/objectidentifier")?.Value;
+
+            if (userId == null)
+            {
+                return BadRequest();
+            }
+
             _logger.LogInformation("Fetching threads from CosmosDb for userId : {0}", userId);
             
             List<Domain.Thread> threads = await _threadRepository.GetThreadsAsync(userId);
 
             _logger.LogInformation("Fetched threads from CosmosDb for userId : {0}", userId);
-            return threads;
+            return Ok(threads);
         }
 
         [HttpPost("")]
-        public async Task<Domain.Thread> CreateThread([FromQuery] string userId)
+        public async Task<IActionResult> CreateThread()
         {
+
+            string userId = HttpContext.User.FindFirst("http://schemas.microsoft.com/identity/claims/objectidentifier")?.Value;
+
+            if (userId == null)
+            {
+                return BadRequest();
+            }
             _logger.LogInformation("Creating thread in CosmosDb for userId : {0}", userId);
 
             Domain.Thread thread = await _threadRepository.CreateThreadAsync(userId);
@@ -78,13 +90,20 @@ namespace DocApi.Controllers
             
             await _threadRepository.PostMessageAsync(userId, thread.Id, "You are a helpful assistant that helps people find information.", "system");
 
-            return thread;
+            return Ok(thread);
         }
 
         [HttpDelete("{threadId}")]
-        public async Task<IActionResult> DeleteThread([FromRoute] string threadId, [FromQuery] string userId)
+        public async Task<IActionResult> DeleteThread([FromRoute] string threadId)
         {
             _logger.LogInformation("Deleting thread in CosmosDb for threadId : {0}", threadId);
+
+            string userId = HttpContext.User.FindFirst("http://schemas.microsoft.com/identity/claims/objectidentifier")?.Value;
+
+            if (userId == null)
+            {
+                return BadRequest();
+            }
 
             bool result = await _threadRepository.MarkThreadAsDeletedAsync(userId, threadId);
 
@@ -98,11 +117,18 @@ namespace DocApi.Controllers
         }
 
         [HttpGet("{threadId}/messages")]
-        public async Task<List<ThreadMessage>> Get([FromRoute] string threadId, [FromQuery] string userId)
+        public async Task<IActionResult> Get([FromRoute] string threadId)
         {
             _logger.LogInformation("Fetching thread messages from CosmosDb for threadId : {0}", threadId);
+            string userId = HttpContext.User.FindFirst("http://schemas.microsoft.com/identity/claims/objectidentifier")?.Value;
+
+            if (userId == null)
+            {
+                return BadRequest();
+            }
+
             List<ThreadMessage> result = await _threadRepository.GetMessagesAsync(userId, threadId);
-            return result;
+            return Ok(result);
         }
 
         [HttpPost("{threadId}/messages")]
@@ -112,11 +138,18 @@ namespace DocApi.Controllers
         {
             _logger.LogInformation("Adding thread message to CosmosDb for threadId : {0}", threadId);
 
-            List<ThreadMessage> messages = await _threadRepository.GetMessagesAsync(messageRequest.UserId, threadId);
+            string userId = HttpContext.User.FindFirst("http://schemas.microsoft.com/identity/claims/objectidentifier")?.Value;
+
+            if(userId == null)
+            {
+                return BadRequest();
+            }
+
+            List<ThreadMessage> messages = await _threadRepository.GetMessagesAsync(userId, threadId);
 
             ChatHistory history = _promptHelper.BuildConversationHistory(messages, messageRequest.Message);
            
-            await _threadRepository.PostMessageAsync(messageRequest.UserId, threadId, messageRequest.Message, "user");
+            await _threadRepository.PostMessageAsync(userId, threadId, messageRequest.Message, "user");
 
             IChatCompletionService completionService = _kernel.GetRequiredService<IChatCompletionService>();
 
@@ -149,7 +182,7 @@ namespace DocApi.Controllers
                 }
             }
             
-            await _threadRepository.PostMessageAsync(messageRequest.UserId, threadId, assistantResponse, "assistant");
+            await _threadRepository.PostMessageAsync(userId, threadId, assistantResponse, "assistant");
             
             return new EmptyResult();
         }
