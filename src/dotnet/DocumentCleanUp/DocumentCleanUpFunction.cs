@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using DocumentCleanUp.Helpers;
 using Domain;
 using Infrastructure;
+using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -19,11 +21,6 @@ public class DocumentCleanUpFunction
 
     private readonly string _storageContainerName;
 
-    // this doesn't work.. can only pass const strings to the Run methods of the function
-    //private readonly string _cosmosDbDatabaseName;
-    //private readonly string _cosmosDbContainerName;
-    //private readonly string _cosmosDbLeaseContainerName;
-
     public DocumentCleanUpFunction(
         ILoggerFactory loggerFactory,
         IConfiguration config,
@@ -37,20 +34,16 @@ public class DocumentCleanUpFunction
         _documentRegistry = documentRegistry;
         _searchService = searchService;
 
-        // this doesn't work.. can only pass const strings to the Run methods of the function
-        //_cosmosDbContainerName = _config["CosmosDb:ContainerName"] ?? throw new ArgumentNullException("CosmosDb:ContainerName");
-        //_cosmosDbDatabaseName = _config["CosmosDb:DatabaseName"] ?? throw new ArgumentNullException("CosmosDb:DatabaseName");
-        //_cosmosDbLeaseContainerName = _config["CosmosDb:LeaseContainerName"] ?? throw new ArgumentNullException("CosmosDb:LeaseContainerName");
-        
-        _storageContainerName = _config["Storage:ContainerName"] ?? throw new ArgumentNullException("Storage:ContainerName");
+        _storageContainerName = _config["StorageContainerName"] ?? throw new ArgumentNullException("StorageContainerName");
     }
 
     [Function("DocumentCleanUp")]
-    public async Task Run([CosmosDBTrigger(
-        databaseName: Constants.COSMOS_DOCUMENTS_DATABASE_NAME,
-        containerName: Constants.COSMOS_DOCUMENTS_CONTAINER_NAME,
+    public async Task<IActionResult> Run([CosmosDBTrigger(
+        databaseName: "%CosmosDBDatabase%",
+        containerName: "%CosmosDbDocumentContainer%",
         Connection = "CosmosDbConnection",
-        LeaseContainerName =Constants.COSMOS_DOCUMENTS_LEASE_CONTAINER_NAME,
+        LeaseContainerName ="%CosmosDbDocumentLease%",
+        FeedPollDelay = 5000, // this to ensure that when deleting documents this is not triggered again
         CreateLeaseContainerIfNotExists = false)] IReadOnlyList<DocsPerThread> input)
     {
         _logger.LogInformation($"CosmosDbTrigger found {input.Count} documents which are soft-deleted.");
@@ -86,6 +79,8 @@ public class DocumentCleanUpFunction
                 _logger.LogInformation($"Document {doc.DocumentName} is not marked for deletion.");
             }
         }
+
+        return new OkResult();
     }
 }
 

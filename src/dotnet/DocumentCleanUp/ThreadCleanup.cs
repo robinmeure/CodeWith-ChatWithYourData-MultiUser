@@ -1,4 +1,6 @@
 ﻿using Infrastructure;
+using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System;
@@ -12,7 +14,6 @@ namespace DocumentCleanUp
     public class ThreadCleanup
     {
         private readonly ILogger _logger;
-        private IConfiguration _config;
         private IDocumentStore _documentStore;
         private IDocumentRegistry _documentRegistry;
         private IThreadRepository _threadRepository;
@@ -24,7 +25,6 @@ namespace DocumentCleanUp
             IThreadRepository threadRepository)
         {
             _logger = loggerFactory.CreateLogger<ThreadCleanup>();
-            _config = config;
             _documentStore = documentStore;
             _documentRegistry = documentRegistry;
             _threadRepository = threadRepository;
@@ -38,22 +38,29 @@ namespace DocumentCleanUp
             }
         }
 
-        public async Task Cleanup(string threadId)
+        public async Task<IActionResult> Cleanup(string threadId)
         {
-            var thread = await _threadRepository.GetThreadsAsync(threadId);
+            var thread = await _threadRepository.GetSoftDeletedThreadAsync(threadId);
+            if (thread.Count == 0)
+            {
+                _logger.LogInformation($"Thread {threadId} not found.");
+                return new NotFoundResult();
+            }
             // get the userId of the thread as well to be used in the delete function
             var userId = thread[0].UserId;
 
-            // step 2: soft delete alle documenten die bij deze thread horen (dit triggered DocCleanUp)
             // get all the docs for thread
-            var docs = _documentRegistry.GetDocsPerThreadAsync(threadId).GetAwaiter().GetResult();
+            var docs = await _documentRegistry.GetDocsPerThreadAsync(threadId);
 
             // set the documents in the documentRegistry to be soft deleted so that the DocumentCleanUpFunction can delete them
-            if (_documentRegistry.RemoveDocumentFromThreadAsync(docs).GetAwaiter().GetResult())
+            if (await _documentRegistry.RemoveDocumentFromThreadAsync(docs))
             {
                 //step 3: hard-delete chat history
-                _threadRepository.DeleteThreadAsync(userId, threadId).GetAwaiter().GetResult();
+               await _threadRepository.DeleteThreadAsync(userId, threadId);
             }
+
+            return new OkResult();
+
         }
 
     }

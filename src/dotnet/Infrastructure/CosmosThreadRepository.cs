@@ -28,24 +28,63 @@ namespace Infrastructure
             _container = cosmosDbContainer;
         }
 
-        public List<ThreadMessage> GetAllThreads(DateTime expirationDate)
+        public async Task<List<ThreadMessage>> GetAllThreads(DateTime expirationDate)
         {
-            IQueryable<ThreadMessage> threads = _container
+            List<ThreadMessage> threads = new List<ThreadMessage>();
+            IQueryable<ThreadMessage> threadsQuery = _container
                 .GetItemLinqQueryable<ThreadMessage>(allowSynchronousQueryExecution: true)
                 .Where(o => o.Created <= expirationDate);
 
-            return threads.ToList();
+            var iterator = threadsQuery.ToFeedIterator();
+
+            while (iterator.HasMoreResults)
+            {
+                var response = await iterator.ReadNextAsync();
+                threads.AddRange(response);
+            }
+
+            return threads;
         }
 
-        public List<string> GetAllThreadIds(DateTime expirationDate)
+        public async Task<List<string>> GetAllThreadIds(DateTime expirationDate)
         {
-            IQueryable<string> threadIds = _container
+            List<string> threadIds = new List<string>();
+
+            IQueryable<string> threadIdsQuery = _container
                 .GetItemLinqQueryable<ThreadMessage>(allowSynchronousQueryExecution: true)
                 .Where(o => o.Created <= expirationDate)
                 .Select(o => o.ThreadId)
                 .Distinct();
 
-            return threadIds.ToList();
+            var iterator = threadIdsQuery.ToFeedIterator();
+
+            var threads = new List<Thread>();
+            while (iterator.HasMoreResults)
+            {
+                var response = await iterator.ReadNextAsync();
+                threadIds.AddRange(response);
+            }
+
+            return threadIds;
+        }
+
+        public async Task<List<Thread>> GetSoftDeletedThreadAsync(string threadId)
+        {
+            var threadsQuery = _container
+                .GetItemLinqQueryable<Thread>(allowSynchronousQueryExecution: true)
+                .Where(t => t.Id == threadId && t.Type == "CHAT_THREAD" && t.Deleted)
+                .OrderByDescending(t => t.ThreadName);
+
+            var iterator = threadsQuery.ToFeedIterator();
+
+            var threads = new List<Thread>();
+            while (iterator.HasMoreResults)
+            {
+                var response = await iterator.ReadNextAsync();
+                threads.AddRange(response);
+            }
+
+            return threads;
         }
 
         public async Task<List<Thread>> GetThreadsAsync(string userId)
@@ -117,21 +156,22 @@ namespace Infrastructure
                 return false;
             }
 
+            // first get all the associated messages to delete these individually
             var messages = await this.GetMessagesAsync(userId, threadId);
 
+            bool messagesDeleted = false;
             foreach (ThreadMessage message in messages)
             {
                 await _container.DeleteItemAsync<ThreadMessage>(message.Id, new PartitionKey(userId));
+                // if for some reason an exception is thrown when deleting the messages,
+                // we keep the boolean set to false thus in a next iteration the remaining messages will be deleted
+                messagesDeleted = true;
             }
 
-            thread.Deleted = true;
-
-            var response = await _container.ReplaceItemAsync<Domain.Thread>(thread, threadId, new PartitionKey(userId));
-
-            if (response.StatusCode != System.Net.HttpStatusCode.OK)
-            {
-                return false;
-            }
+            // if there are no more messages, we can safely delete the thread
+            if(messagesDeleted || messages.Count ==0)
+                await _container.DeleteItemAsync<Thread>(threadId, new PartitionKey(userId));
+            
             return true;
 
         }
