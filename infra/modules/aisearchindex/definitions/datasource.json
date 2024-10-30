@@ -6,10 +6,5 @@
     },
     "container": {
         "name": "{DATA_SOURCE_CONTAINER_NAME}"
-    },
-    "dataDeletionDetectionPolicy": {
-        "@odata.type": "#Microsoft.Azure.Search.SoftDeleteColumnDeletionDetectionPolicy",
-        "softDeleteColumnName": "IsDeleted",
-        "softDeleteMarkerValue": "true"
     }
 }
