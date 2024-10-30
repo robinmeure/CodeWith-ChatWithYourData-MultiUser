@@ -1,4 +1,4 @@
-import { makeStyles, tokens } from '@fluentui/react-components';
+import { makeStyles, Toast, Toaster, ToastTitle, tokens, useId, useToastController } from '@fluentui/react-components';
 import { useChatMessages } from '../../hooks/useChatMessages';
 import { useState } from 'react';
 import { MessageList } from './MessageList';
@@ -25,6 +25,9 @@ const useClasses = makeStyles({
         display: 'flex',
         height: '100%',
         flexDirection: 'column',
+    },
+    toast: {
+        width: '200%'
     }
 });
 
@@ -37,18 +40,29 @@ export function ChatInterface({ selectedChatId }: chatInterfaceType) {
     const { messages, sendMessage, chatPending } = useChatMessages(selectedChatId);
     const [userInput, setUserInput] = useState<string>("");
     const [selectedTab, setSelectedTab] = useState<string>("chat");
+    const toasterId = useId("toaster");
+    const { dispatchToast } = useToastController(toasterId);
 
+    const notify = () =>
+        dispatchToast(
+            <Toast className={classes.toast}>
+                <ToastTitle>Your rate limit for sending messages is exceeded, please try again in a while.</ToastTitle>
+            </Toast>,
+            { position: "bottom", intent: "warning", timeout: 5000}
+        );
 
-    const submitMessage = () => {
+    const submitMessage = async () => {
         if (selectedChatId && userInput) {
             setUserInput("");
-            sendMessage({ message: userInput });
+            const success = await sendMessage({ message: userInput });
+            if (!success) notify();
         }
     }
 
     return (
         <div className={classes.root}>
             <div className={classes.body}>
+                <Toaster toasterId={toasterId} />
                 {(selectedChatId) && (<ChatHeader selectedTab={selectedTab} setSelectedTab={setSelectedTab} />)}
                 {(selectedTab === "chat" && selectedChatId) && (
                     <>

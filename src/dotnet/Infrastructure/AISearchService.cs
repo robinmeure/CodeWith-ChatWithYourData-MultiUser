@@ -40,9 +40,21 @@ namespace Infrastructure
         {
             try
             {
+                
+                var searchOptions = new SearchOptions
+                {
+                    Size = 500,
+                    Select = { "chunk_id", "document_id", "thread_id" },
+                    Filter = string.Format("document_id eq '{0}'", document.Id)
+                };
+                SearchResults<SearchDocument> response = await _searchClient.SearchAsync<SearchDocument>("*", searchOptions);
 
-                IndexDocumentsBatch<SearchDocument> batch =
-                    IndexDocumentsBatch.Create(IndexDocumentsAction.Delete("chunk_id", document.ChunkId));
+                IndexDocumentsBatch<SearchDocument> batch = new IndexDocumentsBatch<SearchDocument>();
+                await foreach (SearchResult<SearchDocument> searchResult in response.GetResultsAsync())
+                {
+                    var deleteAction = IndexDocumentsAction.Delete("chunk_id", searchResult.Document["chunk_id"].ToString());
+                    batch.Actions.Add(deleteAction);
+                }
 
                 IndexDocumentsResult result = await _searchClient.IndexDocumentsAsync(batch);
 
@@ -64,51 +76,22 @@ namespace Infrastructure
 
         public async Task<List<DocsPerThread>> IsChunkingComplete(List<DocsPerThread> docsPerThreads)
         {
-            string vectorQuery = string.Format("thread_id = '{0}'", docsPerThreads.First().ThreadId);
-            var query = new VectorizableTextQuery(vectorQuery);
-            query.Fields.Add("content_vector");
 
-            var searchOptions = new SearchOptions
+            for ( int x = 0; x < docsPerThreads.Count; x++)
             {
-                VectorSearch = new()
+                var doc = docsPerThreads[x];
+                var searchOptions = new SearchOptions
                 {
-                    Queries = { query }
-                },
-                Size = 50,
-                Select = { "chunk_id", "content_vector", "file_name", "document_id", "thread_id" },
-            };
-
-            SearchResults<SearchDocument> response = await _searchClient.SearchAsync<SearchDocument>(null, searchOptions);
-
-            // temporary list to store the documents that are found in the search index
-            var fromSearch = new Dictionary<string, string>();
-            await foreach (SearchResult<SearchDocument> result in response.GetResultsAsync())
-            {
-                string chunkId = result.Document["chunk_id"].ToString();
-                string documentId = result.Document["document_id"].ToString();
-                if (string.IsNullOrEmpty(chunkId) || string.IsNullOrEmpty(documentId))
-                    continue;
-
-                fromSearch[documentId] = chunkId;
+                    Size = 1,
+                    IncludeTotalCount = true,
+                    Select = { "chunk_id", "document_id", "thread_id" },
+                    Filter = string.Format("document_id eq '{0}'", doc.Id)
+                };
+                SearchResults<SearchDocument> response = await _searchClient.SearchAsync<SearchDocument>("*", searchOptions);
+                doc.AvailableInSearchIndex = response.TotalCount > 0;
             }
 
-            // Use LINQ to update the AvailableInSearchIndex and SearchId properties
-            var returnSet = docsPerThreads.Select(dpt =>
-            {
-                if (fromSearch.TryGetValue(dpt.Id, out var chunkId))
-                {
-                    dpt.AvailableInSearchIndex = true;
-                    dpt.ChunkId = chunkId;
-                }
-                else
-                {
-                    dpt.AvailableInSearchIndex = false;
-                    dpt.ChunkId = null;
-                }
-                return dpt;
-            }).ToList();
-
-            return returnSet;
+            return docsPerThreads;
         }
     }
 }

@@ -140,50 +140,59 @@ namespace DocApi.Controllers
 
             string userId = HttpContext.User.FindFirst("http://schemas.microsoft.com/identity/claims/objectidentifier")?.Value;
 
-            if(userId == null)
+            if (userId == null)
             {
                 return BadRequest();
             }
 
-            List<ThreadMessage> messages = await _threadRepository.GetMessagesAsync(userId, threadId);
-
-            ChatHistory history = _promptHelper.BuildConversationHistory(messages, messageRequest.Message);
-           
-            await _threadRepository.PostMessageAsync(userId, threadId, messageRequest.Message, "user");
-
-            IChatCompletionService completionService = _kernel.GetRequiredService<IChatCompletionService>();
-
-            string rewrittenQuery = await _promptHelper.RewriteQueryAsync(history);
-
-            // Text search.
-            var filter = new TextSearchFilter().Equality("ThreadId", threadId);
-            var searchOptions = new TextSearchOptions() { 
-                Filter = filter,
-                Top = 3
-            };
-            KernelSearchResults<object> searchResults = await _search.GetSearchResultsAsync(rewrittenQuery, searchOptions);
-
-            await _promptHelper.AugmentHistoryWithSearchResults(history, searchResults);
-
-            var response = completionService.GetStreamingChatMessageContentsAsync(
-                chatHistory: history,
-                kernel: _kernel
-            );
-
-            var assistantResponse = "";
-
-            await using (StreamWriter streamWriter = new StreamWriter(Response.Body, Encoding.UTF8))
+            try
             {
-                await foreach (var chunk in response)
+
+                List<ThreadMessage> messages = await _threadRepository.GetMessagesAsync(userId, threadId);
+
+                ChatHistory history = _promptHelper.BuildConversationHistory(messages, messageRequest.Message);
+
+
+                IChatCompletionService completionService = _kernel.GetRequiredService<IChatCompletionService>();
+
+                string rewrittenQuery = await _promptHelper.RewriteQueryAsync(history);
+
+                // Text search.
+                var filter = new TextSearchFilter().Equality("ThreadId", threadId);
+                var searchOptions = new TextSearchOptions()
                 {
-                    assistantResponse += chunk.Content;
-                    await streamWriter.WriteAsync(chunk.Content);
-                    await streamWriter.FlushAsync();
+                    Filter = filter,
+                    Top = 3
+                };
+                KernelSearchResults<object> searchResults = await _search.GetSearchResultsAsync(rewrittenQuery, searchOptions);
+
+                await _promptHelper.AugmentHistoryWithSearchResults(history, searchResults);
+
+                var response = completionService.GetStreamingChatMessageContentsAsync(
+                    chatHistory: history,
+                    kernel: _kernel
+                );
+
+                var assistantResponse = "";
+
+                await using (StreamWriter streamWriter = new StreamWriter(Response.Body, Encoding.UTF8))
+                {
+                    await foreach (var chunk in response)
+                    {
+                        assistantResponse += chunk.Content;
+                        await streamWriter.WriteAsync(chunk.Content);
+                        await streamWriter.FlushAsync();
+                    }
                 }
+
+                await _threadRepository.PostMessageAsync(userId, threadId, messageRequest.Message, "user");
+
+                await _threadRepository.PostMessageAsync(userId, threadId, assistantResponse, "assistant");
             }
-            
-            await _threadRepository.PostMessageAsync(userId, threadId, assistantResponse, "assistant");
-            
+            catch (Exception ex)
+            {
+                _logger.LogError("An error occurred: {0}", ex.Message);
+            }
             return new EmptyResult();
         }
     }
