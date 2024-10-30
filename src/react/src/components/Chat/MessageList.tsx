@@ -34,8 +34,12 @@ export function MessageList({ messages, loading }: messageListType) {
     const containerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        if (containerRef.current) {
-            containerRef.current.scrollTop = containerRef.current.scrollHeight;
+        if (containerRef.current ) {
+            const newMessageHeight = 100;
+            containerRef.current.scrollTo({
+                top: containerRef.current.scrollHeight - containerRef.current.clientHeight + newMessageHeight,
+                behavior: 'smooth',
+            });
         }
     }, [messages]);
 

@@ -38,6 +38,12 @@ const useClasses = makeStyles({
         fontSize: tokens.fontSizeBase200,
         color: tokens.colorNeutralForeground3
     },
+    thinkingContainer: {
+        width: '50%',
+        backgroundColor: tokens.colorNeutralBackground1Pressed,
+        borderRadius: tokens.borderRadiusXLarge,
+        padding: tokens.spacingHorizontalL,
+    },
     title: {
         flexGrow: 1,
         fontSize: tokens.fontSizeBase500,
@@ -55,9 +61,11 @@ export function Message({ message }: messageProps) {
     return (
         <div id={message.id} className={message.role == "user" ? classes.userContainer : classes.assistantContainer}>
             {message.content == "" ? (
+                <div className={classes.thinkingContainer}>
                 <Field validationMessage="Thinking..." validationState="none">
                     <ProgressBar />
                 </Field>
+                </div>
             ) : (<div className={message.role == "user" ? classes.userTextContainer : classes.assistantTextContainer}>
                 <Markdown>{message.content}</Markdown>
             </div>)}

@@ -29,7 +29,7 @@ export const useChatMessages = (chatId: string | undefined) => {
 
     const sendMessage = async ({ message }: { message: string }) => {
 
-        if(!chatId) return; 
+        if(!chatId) return false; 
         let result = '';
         setMessages(prev => {
             const updated = [...prev];
@@ -47,7 +47,7 @@ export const useChatMessages = (chatId: string | undefined) => {
         const response = await chatService.sendMessageAsync({chatId: chatId, message: message, token: accessToken});
         
         if (!response || !response.body) {
-            return;
+            return false;
         }
 
         const reader = response.body.getReader();
@@ -69,6 +69,17 @@ export const useChatMessages = (chatId: string | undefined) => {
                 return updated;
             });
         }
+        // Check if message is filled, otherwise stop
+        if(result == ''){
+            setMessages(prev => {
+                const updated = [...prev];
+                updated.pop();
+                updated.pop();
+                return updated;
+            });
+            return false;
+        }
+        return true;
     };
 
     return {

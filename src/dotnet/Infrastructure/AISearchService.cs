@@ -83,12 +83,12 @@ namespace Infrastructure
                 var searchOptions = new SearchOptions
                 {
                     Size = 1,
+                    IncludeTotalCount = true,
                     Select = { "chunk_id", "document_id", "thread_id" },
                     Filter = string.Format("document_id eq '{0}'", doc.Id)
                 };
                 SearchResults<SearchDocument> response = await _searchClient.SearchAsync<SearchDocument>("*", searchOptions);
-                
-                doc.AvailableInSearchIndex = response.GetResults().Count() > 0;
+                doc.AvailableInSearchIndex = response.TotalCount > 0;
             }
 
             return docsPerThreads;
