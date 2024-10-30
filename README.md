@@ -6,7 +6,7 @@
 For API permissions, the solution requires you to register the front-end and back-end applications in Entra ID.
 
 #### Back-end
-The back-end app registration should expose an API with custom permissions, to do this, go to the app registration -> expose an API. Here you can configure a custom scope for the back-end API (e.g. "chat").
+The back-end app registration should expose an API with custom permissions, to do this, go to the app registration -> expose an API. Here you can configure a custom scope for the back-end API, which you must set to "chat" (as this is expected by the back-end, to change this, change the controllers of the webapi to expect another scope).
 Save the value of the scope for later use.
 
 #### Front-end
