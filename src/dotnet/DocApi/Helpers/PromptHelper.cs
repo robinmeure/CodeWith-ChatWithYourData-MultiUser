@@ -65,8 +65,7 @@ namespace DocApi.Utils
             -------    
             {documents}
 
-            Use the above documents to answer the last user question. Include citations in the form of [File Name] to the relevant information where it is referenced in the response.
-            ";
+            Use the above documents to answer the last user question. Include inline citations where applicable, inline in the form of (File Name) in bold. Do not use the document ID for this or make this a link, as this information is not clickable. ";
 
             history.AddSystemMessage(systemPrompt);
 
