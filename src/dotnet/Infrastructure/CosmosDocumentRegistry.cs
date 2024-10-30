@@ -120,7 +120,7 @@ namespace Infrastructure
         public async Task<List<DocsPerThread>> GetDocsPerThreadAsync(string threadId)
         {
             var queryable = _container.GetItemLinqQueryable<DocsPerThread>(requestOptions: new QueryRequestOptions { MaxItemCount = 500 })
-                                      .Where(d => d.ThreadId == threadId);
+                                      .Where(d => d.ThreadId == threadId && d.Deleted == false);
 
             var documents = new List<DocsPerThread>();
             using (var iterator = queryable.ToFeedIterator())

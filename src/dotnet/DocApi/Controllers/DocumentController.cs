@@ -7,14 +7,16 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Identity.Client;
+using Microsoft.Identity.Web.Resource;
 using System.Reflection.Metadata;
 using System.Xml.Linq;
 
 namespace DocApi.Controllers
 {
-    //[Authorize]
-    [ApiController]
     [Route("/threads/{threadId}/documents")]
+    [Authorize]
+    [ApiController]
+    [RequiredScope("chat")]
     public class DocumentController : ControllerBase
     {
         private readonly IDocumentStore _documentStore;
@@ -68,8 +70,15 @@ namespace DocApi.Controllers
         }
 
         [HttpPost()]
-        public async Task<IActionResult> UploadDocuments(List<IFormFile> documents, string userId, [FromRoute] string threadId)
+        public async Task<IActionResult> UploadDocuments(List<IFormFile> documents, [FromRoute] string threadId)
         {
+            string userId = HttpContext.User.FindFirst("http://schemas.microsoft.com/identity/claims/objectidentifier")?.Value;
+
+            if (userId == null)
+            {
+                return BadRequest();
+            }
+
             if (documents == null || !documents.Any())
             {
                 _logger.LogWarning("No files uploaded.");

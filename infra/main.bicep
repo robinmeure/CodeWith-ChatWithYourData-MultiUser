@@ -34,6 +34,9 @@ param backendAppName string = 'backend-${uniqueString(resourceGroup().id)}'
 @description('Name of the front end site.')
 param frontendAppName string = 'frontend-${uniqueString(resourceGroup().id)}'
 
+@description('Name of the function app.')
+param functionAppName string = 'func-${uniqueString(resourceGroup().id)}'
+
 @description('Name of the cosmos DB account.')
 param cosmosAccountName string = 'cosmos-${uniqueString(resourceGroup().id)}'
 
@@ -92,6 +95,22 @@ module backendSite 'br/public:avm/res/web/site:0.9.0' = {
   }
 }
 
+module functionApp 'br/public:avm/res/web/site:0.9.0' = {
+  name: 'functionApp'
+  params: {
+    kind: 'functionapp'
+    name: functionAppName
+    serverFarmResourceId: appServicePlan.outputs.resourceId
+    location: resourceGroup().location
+    managedIdentities: {
+      systemAssigned: true
+    }
+    appSettingsKeyValuePairs:{
+      FUNCTIONS_EXTENSION_VERSION: '~4'
+    }
+  }
+}
+
 module aiSearch 'br/public:avm/res/search/search-service:0.7.1' = {
   name: 'aiSearch'
   params: {
@@ -143,6 +162,11 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.9.1' = {
             }
             {
               principalId: backendSite.outputs.systemAssignedMIPrincipalId
+              principalType: 'ServicePrincipal'
+              roleDefinitionIdOrName: 'Storage Blob Data Contributor'
+            }
+            {
+              principalId: functionApp.outputs.systemAssignedMIPrincipalId
               principalType: 'ServicePrincipal'
               roleDefinitionIdOrName: 'Storage Blob Data Contributor'
             }
@@ -241,6 +265,7 @@ module cosmosDB 'br/public:avm/res/document-db/database-account:0.8.0' = {
     ]
     sqlRoleAssignmentsPrincipalIds: [
       backendSite.outputs.systemAssignedMIPrincipalId
+      functionApp.outputs.systemAssignedMIPrincipalId
     ]
     sqlRoleDefinitions: [
       {

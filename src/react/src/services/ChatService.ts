@@ -5,10 +5,10 @@ export class ChatService {
 
     private readonly baseUrl = process.env.VITE_BACKEND_URL;
 
-    public getChatsAsync = async (userId: string, token: string): Promise<IChat[]> => {
+    public getChatsAsync = async (token: string): Promise<IChat[]> => {
 
         try {
-            const response = await fetch(`${this.baseUrl}/threads?userId=${userId}`, {
+            const response = await fetch(`${this.baseUrl}/threads`, {
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
@@ -25,9 +25,9 @@ export class ChatService {
         return [];
     };
 
-    public getChatMessagesAsync = async ({chatId, userId, token} : {chatId: string, userId: string, token: string}): Promise<IChatMessage[]> => {
+    public getChatMessagesAsync = async ({chatId, token} : {chatId: string, token: string}): Promise<IChatMessage[]> => {
         try {
-            const response = await fetch(`${this.baseUrl}/threads/${chatId}/messages?userId=${userId}`,
+            const response = await fetch(`${this.baseUrl}/threads/${chatId}/messages`,
                 {
                     headers: {
                         'Authorization': `Bearer ${token}`,
@@ -46,10 +46,10 @@ export class ChatService {
         }
     };
 
-    public createChatAsync = async ({userId, token} : {userId: string, token: string}): Promise<IChat> => {
+    public createChatAsync = async ({token} : { token: string}): Promise<IChat> => {
 
         try {
-            const response = await fetch(`${this.baseUrl}/threads?userId=${userId}`, {
+            const response = await fetch(`${this.baseUrl}/threads`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -67,10 +67,10 @@ export class ChatService {
         }
     }
 
-    public deleteChatAsync = async ({chatId, userId, token } : {chatId: string, userId: string, token: string}): Promise<boolean> => {
+    public deleteChatAsync = async ({chatId, token } : {chatId: string, token: string}): Promise<boolean> => {
 
         try {
-            const response = await fetch(`${this.baseUrl}/threads/${chatId}?userId=${userId}`, {
+            const response = await fetch(`${this.baseUrl}/threads/${chatId}`, {
                 method: 'DELETE',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -87,7 +87,7 @@ export class ChatService {
         }
     }
 
-    public sendMessageAsync = async ({chatId, message, userId, token} : { chatId: string, message: string, userId: string, token: string }): Promise<Response> => {
+    public sendMessageAsync = async ({chatId, message, token} : { chatId: string, message: string, token: string }): Promise<Response> => {
 
         try{
             const response = await fetch(`${this.baseUrl}/threads/${chatId}/messages`, {
@@ -96,7 +96,7 @@ export class ChatService {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ message: message, userId: userId }),
+                body: JSON.stringify({ message: message }),
             });
             return response;
         } catch( error ) {

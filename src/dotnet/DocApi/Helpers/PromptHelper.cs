@@ -36,6 +36,7 @@ namespace DocApi.Utils
 
         public async Task<string> RewriteQueryAsync(ChatHistory history)
         {
+
             IChatCompletionService completionService = _kernel.GetRequiredService<IChatCompletionService>();
             history.AddSystemMessage(_rewritePrompt);
             var rewrittenQuery = await completionService.GetChatMessageContentsAsync(
