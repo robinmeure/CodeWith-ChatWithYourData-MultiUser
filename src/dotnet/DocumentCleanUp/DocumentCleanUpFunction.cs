@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using DocumentCleanUp.Helpers;
 using Domain;
 using Infrastructure;
 using Microsoft.AspNetCore.Http.HttpResults;
