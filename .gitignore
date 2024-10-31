@@ -405,5 +405,3 @@ FodyWeavers.xsd
 /src/dotnet/DocumentCleanUp/Properties/launchSettings.json
 /src/dotnet/DocumentCleanUp/Properties/serviceDependencies.json
 /src/dotnet/DocumentCleanUp/Properties/serviceDependencies.local.json
-/deploy/deploy-function.ps1
-/deploy/deploy.ps1
