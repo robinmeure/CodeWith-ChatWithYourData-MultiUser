@@ -37,17 +37,21 @@ param frontendAppName string = 'frontend-${uniqueString(resourceGroup().id)}'
 @description('Name of the function app.')
 param functionAppName string = 'func-${uniqueString(resourceGroup().id)}'
 
+@maxLength(24)
+@description('Name of the storage account for the function app.')
+param functionAppStorageAccountName string = take('safunc${uniqueString(resourceGroup().id)}', 24)
+
 @description('Name of the cosmos DB account.')
 param cosmosAccountName string = 'cosmos-${uniqueString(resourceGroup().id)}'
 
 @description('Azure AD instance for backend api security.')
-param azureAdInstance string
+param azureAdInstance string = 'https://login.microsoftonline.com'
 
 @description('Client ID of the app registration of the backend app.')
-param azureAdClientId string
+param azureAdClientId string = '320963f0-e28f-4d39-98e9-5cf7fa547d29'
 
 @description('Tenant ID.')
-param azureAdTenantId string 
+param azureAdTenantId string = 'f903e023-a92d-4561-9a3b-d8429e3fa1fd'
 
 var cosmosDatabaseName = 'history'
 var cosmosDocumentContainerName = 'documentsperthread'
@@ -95,21 +99,7 @@ module backendSite 'br/public:avm/res/web/site:0.9.0' = {
   }
 }
 
-module functionApp 'br/public:avm/res/web/site:0.9.0' = {
-  name: 'functionApp'
-  params: {
-    kind: 'functionapp'
-    name: functionAppName
-    serverFarmResourceId: appServicePlan.outputs.resourceId
-    location: resourceGroup().location
-    managedIdentities: {
-      systemAssigned: true
-    }
-    appSettingsKeyValuePairs:{
-      FUNCTIONS_EXTENSION_VERSION: '~4'
-    }
-  }
-}
+
 
 module aiSearch 'br/public:avm/res/search/search-service:0.7.1' = {
   name: 'aiSearch'
@@ -162,11 +152,6 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.9.1' = {
             }
             {
               principalId: backendSite.outputs.systemAssignedMIPrincipalId
-              principalType: 'ServicePrincipal'
-              roleDefinitionIdOrName: 'Storage Blob Data Contributor'
-            }
-            {
-              principalId: functionApp.outputs.systemAssignedMIPrincipalId
               principalType: 'ServicePrincipal'
               roleDefinitionIdOrName: 'Storage Blob Data Contributor'
             }
@@ -308,6 +293,65 @@ resource backendAppSettings 'Microsoft.Web/sites/config@2022-09-01' = {
     'OpenAI:EmbeddingModel': integratedVectorEmbeddingModelId
     'OpenAI:CompletionModel': completionModelName
   }
+}
+
+
+
+module functionAppStorageAccount 'br/public:avm/res/storage/storage-account:0.9.1' = {
+  name: 'functionAppStorageAccount'
+  params: {
+    name: functionAppStorageAccountName
+    kind: 'BlobStorage'
+    location: resourceGroup().location
+    skuName: 'Standard_GRS'
+    allowBlobPublicAccess: false
+    publicNetworkAccess: 'Enabled'
+    networkAcls: {
+      bypass: 'AzureServices'
+      defaultAction: 'Allow'
+    }
+    blobServices: {
+      containers: [
+        {
+          name: blobStorageContainerName
+        }
+      ]
+    }
+  }
+}
+
+module functionApp 'br/public:avm/res/web/site:0.9.0' = {
+  name: 'functionApp'
+  params: {
+    kind: 'functionapp'
+    name: functionAppName
+    serverFarmResourceId: appServicePlan.outputs.resourceId
+    location: resourceGroup().location
+    managedIdentities: {
+      systemAssigned: true
+    }
+    appSettingsKeyValuePairs:{
+      FUNCTIONS_EXTENSION_VERSION: '~4'
+    }
+    storageAccountRequired: true
+    storageAccountResourceId: functionAppStorageAccount.outputs.resourceId
+    storageAccountUseIdentityAuthentication:false
+  }
+}
+
+resource blobStorageContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2021-04-01' existing = {
+  name: '${functionAppStorageAccountName}/default/${blobStorageContainerName}'
+}
+
+var storageBlobContributorId = resourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe') // Storage Blob Data Contributor role ID
+resource storageBlobContributorAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+    scope: blobStorageContainer
+    name: guid(subscription().id, resourceGroup().id, functionApp.name, storageBlobContributorId)
+    properties: {
+      roleDefinitionId: storageBlobContributorId
+      principalId: functionApp.outputs.systemAssignedMIPrincipalId
+      principalType: 'ServicePrincipal'
+    } 
 }
 
 
