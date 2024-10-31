@@ -33,7 +33,7 @@ public class ThreadCleanUpFunctionFromCosmos
         Connection = "CosmosDbConnection",
         LeaseContainerName ="%CosmosDbThreadLease%",
         FeedPollDelay = 5000, // this to ensure that when deleting messages from a thread the trigger is not triggered again
-        CreateLeaseContainerIfNotExists = true)] IReadOnlyList<Thread> threads)
+        CreateLeaseContainerIfNotExists = false)] IReadOnlyList<Thread> threads)
     {
         _logger.LogInformation($"CosmosDbTrigger found {threads.Count} threads which are soft-deleted.");
 
