@@ -35,9 +35,8 @@ export function MessageList({ messages, loading }: messageListType) {
 
     useEffect(() => {
         if (containerRef.current ) {
-            const newMessageHeight = 100;
             containerRef.current.scrollTo({
-                top: containerRef.current.scrollHeight - containerRef.current.clientHeight + newMessageHeight,
+                top: containerRef.current.scrollTop = containerRef.current.scrollHeight,
                 behavior: 'smooth',
             });
         }
