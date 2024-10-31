@@ -14,62 +14,74 @@ using DocumentCleanUp;
 
 var host = new HostBuilder()
     .ConfigureFunctionsWebApplication()
-    .ConfigureServices(services =>
-    {
-        services.AddApplicationInsightsTelemetryWorkerService();
-        //read configuration
-        var builder = new ConfigurationBuilder()
-            .AddEnvironmentVariables()
-            .AddJsonFile("local.settings.json", optional: true, reloadOnChange: true);
 
-        var config = builder.Build();
+   .ConfigureServices((hostContext, services) =>
+   {
 
-        DefaultAzureCredentialOptions azureCredentialOptions =
-            DefaultCredentialOptions.GetDefaultAzureCredentialOptions(config["ASPNETCORE_ENVIRONMENT"]);
-
-        var azureCredential = new DefaultAzureCredential(azureCredentialOptions);
-        // Add services to the container.
-        services.AddAzureClients(clientBuilder =>
-        {
-            // Register clients for each service
-            Uri serviceUri = new Uri(config["Storage:ServiceUri"]);
-            clientBuilder.AddBlobServiceClient(serviceUri);
-            clientBuilder.UseCredential(azureCredential);
-        });
+       DefaultAzureCredentialOptions azureCredentialOptions =
+             DefaultCredentialOptions.GetDefaultAzureCredentialOptions(hostContext.Configuration["ASPNETCORE_ENVIRONMENT"]);
+       var azureCredential = new DefaultAzureCredential(azureCredentialOptions);
 
 
-        services.AddSingleton(sp =>
-        {
-            string accountEndpoint = config["Cosmos:AccountEndpoint"];
-            string cosmosDBDatabase = config["Cosmos:DatabaseName"];
-            string cosmosDBContainer = config["Cosmos:Container"];
+       services.AddAzureClients(clientBuilder =>
+       {
+           // Register clients for each service
+           Uri serviceUri = new Uri(hostContext.Configuration["StorageServiceUri"]);
+           clientBuilder.AddBlobServiceClient(serviceUri);
+           clientBuilder.UseCredential(azureCredential);
+       });
 
-            // Create and configure CosmosClientOptions
-            var cosmosClientOptions = new CosmosClientOptions
-            {
-                ConnectionMode = ConnectionMode.Direct,
-                RequestTimeout = TimeSpan.FromSeconds(30)
-            };
+       Uri serviceUri = new Uri(hostContext.Configuration["SearchEndPoint"]);
+       string indexName = hostContext.Configuration["SearchIndexName"];
 
-            var client = new CosmosClient(accountEndpoint, azureCredential, cosmosClientOptions);
-            var database = client.GetDatabase(cosmosDBDatabase);
-            return database.GetContainer(cosmosDBContainer);
-        });
+       services.AddSingleton(sp => new SearchClient(serviceUri, indexName, azureCredential));
+       services.AddSingleton(sp => new SearchIndexClient(serviceUri, azureCredential));
+       services.AddSingleton(sp => new SearchIndexerClient(serviceUri, azureCredential));
 
-        Uri serviceUri = new Uri(config["Search:EndPoint"]);
-        string indexName = config["Search:IndexName"];
+       services.AddSingleton<ISearchService, AISearchService>();
+       services.AddSingleton<IDocumentStore, BlobDocumentStore>();
+       services.AddSingleton<IDocumentRegistry>(sp =>
+       {
+           string accountEndpoint = hostContext.Configuration["MyCosmosConnection"];
+           string cosmosDBDatabase = hostContext.Configuration["CosmosDbDatabase"];
+           string cosmosDBContainer = hostContext.Configuration["CosmosDbDocumentContainer"];
 
-        services.AddSingleton(sp => new SearchClient(serviceUri, indexName, azureCredential));
-        services.AddSingleton(sp => new SearchIndexClient(serviceUri, azureCredential));
-        services.AddSingleton(sp => new SearchIndexerClient(serviceUri, azureCredential));
+           // Create and configure CosmosClientOptions
+           var cosmosClientOptions = new CosmosClientOptions
+           {
+               ConnectionMode = ConnectionMode.Direct,
+               RequestTimeout = TimeSpan.FromSeconds(30)
+           };
 
-        services.AddSingleton<ThreadCleanup>();
-        services.AddScoped<IDocumentStore, BlobDocumentStore>();
-        services.AddScoped<IDocumentRegistry, CosmosDocumentRegistry>();
-        //services.AddSingleton<IConfiguration>(config);
+           var client = new CosmosClient(accountEndpoint, azureCredential, cosmosClientOptions);
+           var database = client.GetDatabase(cosmosDBDatabase);
+           var container = database.GetContainer(cosmosDBContainer);
+           return new CosmosDocumentRegistry(container);
+       });
+       services.AddSingleton<IThreadRepository>(sp =>
+       {
+           string accountEndpoint = hostContext.Configuration["MyCosmosConnection"];
+           string databaseName = hostContext.Configuration["CosmosDbDatabase"];
+           string containerName = hostContext.Configuration["CosmosDbThreadContainer"];
 
-        services.ConfigureFunctionsApplicationInsights();
-    })
-    .Build();
+           // Create and configure CosmosClientOptions
+           var cosmosClientOptions = new CosmosClientOptions
+           {
+               ConnectionMode = ConnectionMode.Direct,
+               RequestTimeout = TimeSpan.FromSeconds(30)
+           };
+           var client = new CosmosClient(accountEndpoint, azureCredential, cosmosClientOptions);
+           var database = client.GetDatabase(databaseName);
+           var container = database.GetContainer(containerName);
+           return new CosmosThreadRepository(container);
+       });
+
+       services.AddSingleton<ThreadCleanup>();
+       services.AddSingleton<DocumentCleanUpFunction>();
+       services.AddSingleton<ThreadCleanUpFunctionFromCosmos>();
+       services.AddSingleton<ThreadCleanUpFunctionTimerTrigger>();
+
+   })
+   .Build();
 
 host.Run();

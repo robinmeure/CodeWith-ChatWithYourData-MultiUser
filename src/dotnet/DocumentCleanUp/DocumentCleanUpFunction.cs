@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using DocumentCleanUp.Helpers;
 using Domain;
 using Infrastructure;
+using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -15,9 +18,8 @@ public class DocumentCleanUpFunction
     private IDocumentStore _documentStore;
     private IDocumentRegistry _documentRegistry;
     private ISearchService _searchService;
-    private static string _cosmosDbDatabaseName = string.Empty;
-    private static string _cosmosDbContainerName = string.Empty;
-    private static string _storageContainerName = string.Empty;
+
+    private readonly string _storageContainerName;
 
     public DocumentCleanUpFunction(
         ILoggerFactory loggerFactory,
@@ -32,17 +34,16 @@ public class DocumentCleanUpFunction
         _documentRegistry = documentRegistry;
         _searchService = searchService;
 
-        _cosmosDbDatabaseName = _config["Cosmos:DatabaseName"] ?? throw new ArgumentNullException("Cosmos:DatabaseName");
-        _cosmosDbContainerName = _config["Cosmos:Container"] ?? throw new ArgumentNullException("Cosmos:Container");
-        _storageContainerName = _config["Storage:ContainerName"] ?? throw new ArgumentNullException("Storage:ContainerName");
+        _storageContainerName = _config["StorageContainerName"] ?? throw new ArgumentNullException("StorageContainerName");
     }
 
     [Function("DocumentCleanUp")]
-    public async Task Run([CosmosDBTrigger(
-        databaseName: "%CosmosDbDatabaseName%",
-        containerName: "%CosmosDbContainerName%",
+    public async Task<IActionResult> Run([CosmosDBTrigger(
+        databaseName: "%CosmosDBDatabase%",
+        containerName: "%CosmosDbDocumentContainer%",
         Connection = "CosmosDbConnection",
-        LeaseContainerName = "%CosmosDbLeaseContainer%",
+        LeaseContainerName ="%CosmosDbDocumentLease%",
+        FeedPollDelay = 5000, // this to ensure that when deleting documents this is not triggered again
         CreateLeaseContainerIfNotExists = false)] IReadOnlyList<DocsPerThread> input)
     {
         _logger.LogInformation($"CosmosDbTrigger found {input.Count} documents which are soft-deleted.");
@@ -78,6 +79,8 @@ public class DocumentCleanUpFunction
                 _logger.LogInformation($"Document {doc.DocumentName} is not marked for deletion.");
             }
         }
+
+        return new OkResult();
     }
 }
 

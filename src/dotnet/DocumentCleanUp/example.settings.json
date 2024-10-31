@@ -1,0 +1,25 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "",
+    "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
+    "CosmosDbDatabase": "history",
+    "CosmosDbDocumentContainer": "documentsperthread",
+    "CosmosDbThreadContainer": "threadhistory",
+    "CosmosDbDocumentLease": "docsleases",
+    "CosmosDbThreadLease": "threadleases",
+    "CosmosDbConnection__accountEndpoint": "",
+    "MyCosmosConnection": "",
+    "ThreadCleanupCron": "0 0 * * * *",
+    "AZURE_TENANT_ID": "",
+    "StorageServiceUri": "",
+    "StorageAccountName": "sabnub5mmkxwtze",
+    "StorageContainerName": "documents",
+    "SearchEndPoint": "",
+    "SearchIndexName": "onyourdata",
+    "SearchIndexerName": "onyourdata-indexer",
+    "SearchDataSourceName": "onyourdata-datasource",
+    "ASPNETCORE_ENVIRONMENT": "Development"
+  }
+  
+}

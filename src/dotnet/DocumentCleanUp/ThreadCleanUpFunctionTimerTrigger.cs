@@ -40,7 +40,7 @@ namespace DocumentCleanUp
             DateTime xDaysAgo = DateTime.Now.AddDays(-_threadCleanupDays);
 
             // Retrieve all thread IDs that need to be cleaned up
-            var threadIds = _threadRepository.GetAllThreadIds(xDaysAgo);
+            var threadIds = await _threadRepository.GetAllThreadIds(xDaysAgo);
 
             // Perform the cleanup asynchronously
             await _threadCleanup.Cleanup(threadIds);
