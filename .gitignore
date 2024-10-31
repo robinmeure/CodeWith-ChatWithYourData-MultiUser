@@ -401,3 +401,7 @@ FodyWeavers.xsd
 /src/dotnet/DocApi/appsettings.Development.json
 /src/dotnet/DocUploadHelper/appsettings.Development.json
 /src/dotnet/DocumentCleanUp/local.settings.json
+/src/dotnet/DocumentCleanUp/Properties/ServiceDependencies/local/cosmosdb1.arm.json
+/src/dotnet/DocumentCleanUp/Properties/launchSettings.json
+/src/dotnet/DocumentCleanUp/Properties/serviceDependencies.json
+/src/dotnet/DocumentCleanUp/Properties/serviceDependencies.local.json

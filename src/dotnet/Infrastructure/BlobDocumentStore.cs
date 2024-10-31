@@ -47,7 +47,9 @@ namespace Infrastructure
                 Id = documentId,
                 ThreadId = threadId,
                 DocumentName = documentName,
-                UserId = userId
+                UserId = userId,
+                FileSize = document.Length,
+                UploadDate = DateTime.Now
             };
 
             return docsPerThread;
