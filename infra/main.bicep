@@ -53,9 +53,11 @@ param azureAdClientId string = '320963f0-e28f-4d39-98e9-5cf7fa547d29'
 @description('Tenant ID.')
 param azureAdTenantId string = 'f903e023-a92d-4561-9a3b-d8429e3fa1fd'
 
-var cosmosDatabaseName = 'history'
+var cosmosDatabaseName = 'chats'
 var cosmosDocumentContainerName = 'documentsperthread'
 var cosmosHistoryContainerName = 'threadhistory'
+var cosmosDocumentLeaseContainerName = 'documentsperthreadlease'
+var cosmosHistoryLeaseContainerName = 'threadhistorylease'
 var sqlRoleName = 'sql-contributor-${cosmosAccountName}'
 
 
@@ -245,9 +247,29 @@ module cosmosDB 'br/public:avm/res/document-db/database-account:0.8.0' = {
               '/userId'
             ]
           }
+          {
+            indexingPolicy: {
+              automatic: true
+            }
+            name: cosmosDocumentLeaseContainerName
+            paths: [
+              '/Id'
+            ]
+          }
+          {
+            indexingPolicy: {
+              automatic: true
+            }
+            name: cosmosHistoryLeaseContainerName
+            paths: [
+              '/Id'
+            ]
+          }
         ]
+
       }
     ]
+    
     sqlRoleAssignmentsPrincipalIds: [
       backendSite.outputs.systemAssignedMIPrincipalId
       functionApp.outputs.systemAssignedMIPrincipalId
@@ -301,7 +323,7 @@ module functionAppStorageAccount 'br/public:avm/res/storage/storage-account:0.9.
   name: 'functionAppStorageAccount'
   params: {
     name: functionAppStorageAccountName
-    kind: 'BlobStorage'
+    kind:'StorageV2'
     location: resourceGroup().location
     skuName: 'Standard_GRS'
     allowBlobPublicAccess: false
@@ -309,14 +331,7 @@ module functionAppStorageAccount 'br/public:avm/res/storage/storage-account:0.9.
     networkAcls: {
       bypass: 'AzureServices'
       defaultAction: 'Allow'
-    }
-    blobServices: {
-      containers: [
-        {
-          name: blobStorageContainerName
-        }
-      ]
-    }
+    }    
   }
 }
 
@@ -335,17 +350,17 @@ module functionApp 'br/public:avm/res/web/site:0.9.0' = {
     }
     storageAccountRequired: true
     storageAccountResourceId: functionAppStorageAccount.outputs.resourceId
-    storageAccountUseIdentityAuthentication:false
+    storageAccountUseIdentityAuthentication:true
   }
 }
 
-resource blobStorageContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2021-04-01' existing = {
-  name: '${functionAppStorageAccountName}/default/${blobStorageContainerName}'
+resource functionAppStorageContainer 'Microsoft.Storage/storageAccounts@2021-04-01' existing = {
+  name: functionAppStorageAccountName
 }
 
-var storageBlobContributorId = resourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe') // Storage Blob Data Contributor role ID
+var storageBlobContributorId = resourceId('Microsoft.Authorization/roleDefinitions', 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b') // Storage Blob Data Owner role ID
 resource storageBlobContributorAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-    scope: blobStorageContainer
+    scope: functionAppStorageContainer
     name: guid(subscription().id, resourceGroup().id, functionApp.name, storageBlobContributorId)
     properties: {
       roleDefinitionId: storageBlobContributorId
