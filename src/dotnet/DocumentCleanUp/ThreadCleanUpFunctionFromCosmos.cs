@@ -42,6 +42,11 @@ public class ThreadCleanUpFunctionFromCosmos
         for (int i = 0; i < threads.Count; i++)
         {
             var thread = threads[i];
+            if (thread.Type != "CHAT_THREAD")
+            {
+                _logger.LogInformation($"Thread {thread.ThreadName} is not a thread. Skipping...ffs!");
+                continue;
+            }
             if (thread.Deleted)
             {
                 _logger.LogInformation($"Thread {thread.ThreadName} is marked for deletion. Deleting...");

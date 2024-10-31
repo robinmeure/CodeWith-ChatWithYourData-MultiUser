@@ -15,9 +15,9 @@ namespace Domain
         public required string UserId { get; set; }
 
         [JsonProperty(PropertyName = "threadName")]
-        public required string ThreadName { get; set; }
+        public string? ThreadName { get; set; }
 
         [JsonProperty(PropertyName = "deleted")]
-        public required bool Deleted { get; set; } = false;
+        public bool Deleted { get; set; } = false;
     }
 }
