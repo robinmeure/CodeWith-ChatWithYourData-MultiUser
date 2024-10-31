@@ -23,7 +23,9 @@ var entry = new DocsPerThread
     DocumentName = "Brochure Elektrisch Rijden nieuw.pdf",
     Id = "f9ec7b4e-8ba7-4e12-a593-7c5fbbc52cc0",
     ThreadId = "1234",
-    UserId = "1234"
+    UserId = "1234",
+    FileSize=0,
+    UploadDate = DateTime.Now
 };
 
 

@@ -183,7 +183,8 @@ namespace Infrastructure
                 Id = Guid.NewGuid().ToString(),
                 Type = "CHAT_THREAD",
                 UserId = userId,
-                ThreadName = DateTime.Now.ToString("dd MMM yyyy, HH:mm")
+                ThreadName = DateTime.Now.ToString("dd MMM yyyy, HH:mm"),
+                Deleted = false //need to be set to false, otherwise the thread will not be returned in the GetThreadsAsync method (and object is not saved properly in cosmosb)
             };
 
             var response = await _container.CreateItemAsync<Domain.Thread>(newThread, new PartitionKey(userId));

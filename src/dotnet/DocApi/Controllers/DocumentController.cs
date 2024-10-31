@@ -176,35 +176,5 @@ namespace DocApi.Controllers
 
             return NotFound();
         }
-
-        //[HttpPost("harddelete/{documentId}", Name = "HardDeleteDocument")]
-        //public async Task<IActionResult> DeleteDocument([FromRoute] string documentId)
-        //{
-        //    var doc = new DocsPerThread
-        //    {
-        //        Deleted = true,
-        //        DocumentName = "SKO2026-08 Prijslijst Elroq per 1 oktober 2024 V7.pdf",
-        //        Id = "ae28090c-3a0c-4f95-8b60-82762e1c407d",
-        //        ThreadId = "987987978",
-        //        UserId = "876yi67y8"
-        //    };
-
-        //    doc = await _searchService.IsChunkingComplete(doc);
-
-        //    // Delete the document from storage
-        //    if (await _documentStore.DeleteDocumentAsync(doc.Id, _containerName))
-        //    {
-
-        //        // Delete the document from the Cosmos DB container
-        //        if (await _documentRegistry.DeleteDocumentAsync(doc))
-        //        {
-
-        //            // Delete the document from the search index
-        //            await _searchService.DeleteDocumentAsync(doc);
-        //        }
-        //    }
-
-        //    return Ok();
-        //}
     }
 }

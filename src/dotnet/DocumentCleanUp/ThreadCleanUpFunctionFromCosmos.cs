@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using DocumentCleanUp.Helpers;
 using Domain;
 using Infrastructure;
 using Microsoft.AspNetCore.Mvc;
@@ -35,14 +34,27 @@ public class ThreadCleanUpFunctionFromCosmos
         FeedPollDelay = 5000, // this to ensure that when deleting messages from a thread the trigger is not triggered again
         CreateLeaseContainerIfNotExists = false)] IReadOnlyList<Thread> threads)
     {
-        _logger.LogInformation($"CosmosDbTrigger found {threads.Count} threads which are soft-deleted.");
+        if (threads == null || threads.Count == 0)
+            return new OkResult();
 
-        threads.Where(t => t.Deleted).ToList().ForEach(async t =>
+        _logger.LogInformation($"CosmosDbTrigger found {threads.Count} threads which are updated");
+
+        for (int i = 0; i < threads.Count; i++)
         {
-            _logger.LogInformation($"Thread {t.ThreadName} is marked for deletion. Deleting...");
-            await _threadCleanup.Cleanup(t.Id);
-        }); 
+            var thread = threads[i];
+            if (thread.Type != "CHAT_THREAD")
+            {
+                _logger.LogInformation($"Thread {thread.ThreadName} is not a thread. Skipping...ffs!");
+                continue;
+            }
+            if (thread.Deleted)
+            {
+                _logger.LogInformation($"Thread {thread.ThreadName} is marked for deletion. Deleting...");
+                await _threadCleanup.Cleanup(thread.Id);
 
+            }
+        }
+   
         return new OkResult();
     }
 }
