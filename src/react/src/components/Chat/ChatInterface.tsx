@@ -48,15 +48,19 @@ export function ChatInterface({ selectedChatId }: chatInterfaceType) {
             <Toast className={classes.toast}>
                 <ToastTitle>Your rate limit for sending messages is exceeded, please try again in a while.</ToastTitle>
             </Toast>,
-            { position: "bottom", intent: "warning", timeout: 5000}
+            { position: "bottom", intent: "warning", timeout: 5000 }
         );
 
-    const submitMessage = async () => {
-        if (selectedChatId && userInput) {
+    const submitMessage = async (message: string) => {
+        if (selectedChatId && message) {
             setUserInput("");
-            const success = await sendMessage({ message: userInput });
+            const success = await sendMessage({ message });
             if (!success) notify();
         }
+    }
+
+    const handleFollowUp = (question: string) => {
+        submitMessage(question);
     }
 
     return (
@@ -66,8 +70,8 @@ export function ChatInterface({ selectedChatId }: chatInterfaceType) {
                 {(selectedChatId) && (<ChatHeader selectedTab={selectedTab} setSelectedTab={setSelectedTab} />)}
                 {(selectedTab === "chat" && selectedChatId) && (
                     <>
-                        <MessageList messages={messages} loading={chatPending} />
-                        <ChatInput value={userInput} setValue={setUserInput} onSubmit={submitMessage} />
+                        <MessageList messages={messages} loading={chatPending} onFollowUp={handleFollowUp} />
+                        <ChatInput value={userInput} setValue={setUserInput} onSubmit={() => submitMessage(userInput)} />
                     </>
                 )}
                 {(selectedTab === "documents" && selectedChatId) && (<DocumentViewer chatId={selectedChatId} />)}

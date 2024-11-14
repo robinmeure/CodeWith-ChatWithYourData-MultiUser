@@ -18,6 +18,7 @@
     <PackageReference Include="Microsoft.SemanticKernel.Connectors.AzureAISearch" Version="1.24.1-preview" />
     <PackageReference Include="Microsoft.SemanticKernel.PromptTemplates.Handlebars" Version="1.24.1" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
   </ItemGroup>
 
   <ItemGroup>

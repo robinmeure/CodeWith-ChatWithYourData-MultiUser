@@ -117,25 +117,20 @@ namespace DocApi
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
 
-            // CORS.
-            builder.Services.AddCors(options =>
-            {
-            options.AddPolicy("AllowLocalhost8000",
-                builder => builder.WithOrigins("http://localhost:8000")
-                                  .AllowAnyHeader()
-                                  .AllowAnyMethod()
-                                  .AllowCredentials());
-            });
-
             // Auth
             builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("AzureAd"));
-
 
             var app = builder.Build();
             app.UseSwagger();
             app.UseSwaggerUI();
 
-            app.UseCors("AllowLocalhost8000");
+            // CORS.
+            app.UseCors(builder => builder
+                .AllowAnyHeader()
+                .AllowAnyMethod()
+                .SetIsOriginAllowed((host) => true)
+                .AllowCredentials()
+            );
 
             app.UseAuthentication();
 

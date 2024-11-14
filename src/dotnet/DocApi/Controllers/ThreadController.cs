@@ -8,6 +8,10 @@ using System.Text;
 using DocApi.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Identity.Web.Resource;
+using Microsoft.Azure.Cosmos;
+using System.Text.Json;
+using WebApi.Helpers;
+using ResponseMessage = WebApi.Helpers.ResponseMessage;
 
 namespace DocApi.Controllers
 {
@@ -132,10 +136,12 @@ namespace DocApi.Controllers
         }
 
         [HttpPost("{threadId}/messages")]
-        [Produces("text/event-stream")]
+        [Produces("application/json")]
         [Consumes("application/json")]
         public async Task<IActionResult> Post([FromRoute] string threadId, [FromBody] MessageRequest messageRequest)
         {
+            bool suggestFollowupQuestions = true; // need to configure this
+
             _logger.LogInformation("Adding thread message to CosmosDb for threadId : {0}", threadId);
 
             string userId = HttpContext.User.FindFirst("http://schemas.microsoft.com/identity/claims/objectidentifier")?.Value;
@@ -168,26 +174,60 @@ namespace DocApi.Controllers
 
                 await _promptHelper.AugmentHistoryWithSearchResults(history, searchResults);
 
-                var response = completionService.GetStreamingChatMessageContentsAsync(
+                var response = await completionService.GetChatMessageContentsAsync(
                     chatHistory: history,
                     kernel: _kernel
                 );
 
                 var assistantResponse = "";
-
-                await using (StreamWriter streamWriter = new StreamWriter(Response.Body, Encoding.UTF8))
+                foreach (var chunk in response)
                 {
-                    await foreach (var chunk in response)
-                    {
-                        assistantResponse += chunk.Content;
-                        await streamWriter.WriteAsync(chunk.Content);
-                        await streamWriter.FlushAsync();
-                    }
+                    assistantResponse += chunk.Content;
                 }
 
-                await _threadRepository.PostMessageAsync(userId, threadId, messageRequest.Message, "user");
+                string[]? followUpQuestionList = null;
+                if (suggestFollowupQuestions is true)
+                {
+                    history.AddUserMessage($@"Generate three follow-up question based on the answer you just generated.
+                        # Answer
+                        {assistantResponse}
 
+                        # Format of the response
+                        Return the follow-up question as a json string list. Don't put your answer between ```json and ```, return the json string directly.
+                        e.g.
+                        [
+                            ""What is the deductible?"",
+                            ""What is the co-pay?"",
+                            ""What is the out-of-pocket maximum?""
+                        ]
+                    ");
+
+                    var question = messageRequest.Message;
+
+                    var followUpQuestions = await completionService.GetChatMessageContentAsync(
+                        history,
+                        null,
+                        _kernel);
+
+                    var followUpQuestionsJson = followUpQuestions.Content ?? throw new InvalidOperationException("Failed to get search query");
+
+                    var followUpQuestionsObject = JsonSerializer.Deserialize<JsonElement>(followUpQuestionsJson);
+                    var followUpQuestionsList = followUpQuestionsObject.EnumerateArray().Select(x => x.GetString()!).ToList();
+                    followUpQuestionList = followUpQuestionsList.ToArray();
+                }
+
+                var responseMessage = new ResponseMessage("assistant", assistantResponse);
+                var responseContext = new ResponseContext(FollowupQuestions: followUpQuestionList ?? Array.Empty<string>());
+                var choice = new ResponseChoice(
+                    Index: 0,
+                    Message: responseMessage,
+                    Context: responseContext,
+                    CitationBaseUrl: "https://localhost");
+
+                await _threadRepository.PostMessageAsync(userId, threadId, messageRequest.Message, "user");
                 await _threadRepository.PostMessageAsync(userId, threadId, assistantResponse, "assistant");
+
+                return Ok(choice);
             }
             catch (Exception ex)
             {

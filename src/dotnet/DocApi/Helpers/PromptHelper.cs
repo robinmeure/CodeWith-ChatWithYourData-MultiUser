@@ -54,6 +54,9 @@ namespace DocApi.Utils
 
             await foreach (IndexDoc doc in searchResults.Results)
             {
+                string chunkId = doc.ChunkId;
+                string pageNumber = chunkId.Split("_pages_")[1];
+                documents += $"PageNumber: {pageNumber}\n";
                 documents += $"Document ID: {doc.DocumentId}\n";
                 documents += $"File Name: {doc.FileName}\n";
                 documents += $"Content: {doc.Content}\n\n";
@@ -65,9 +68,28 @@ namespace DocApi.Utils
             -------    
             {documents}
 
-            Use the above documents to answer the last user question. Include inline citations where applicable, inline in the form of (File Name) in bold. Do not use the document ID for this or make this a link, as this information is not clickable. ";
+            Use the above documents to answer the last user question. 
+            Include inline citations where applicable, inline in the form of (File Name) in bold and on which page it was found.
+            If no source available, put the answer as I don't know.";
 
             history.AddSystemMessage(systemPrompt);
+
+            //await foreach (IndexDoc doc in searchResults.Results)
+            //{
+            //    documents += $"Document ID: {doc.DocumentId}\n";
+            //    documents += $"File Name: {doc.FileName}\n";
+            //    documents += $"Content: {doc.Content}\n\n";
+            //    documents += "------\n\n";
+            //}
+
+            //string systemPrompt = $@"
+            //Documents
+            //-------    
+            //{documents}
+
+            //Use the above documents to answer the last user question. Include inline citations where applicable, inline in the form of (File Name) in bold. Do not use the document ID for this or make this a link, as this information is not clickable. ";
+
+            //history.AddSystemMessage(systemPrompt);
 
             return history;
         }

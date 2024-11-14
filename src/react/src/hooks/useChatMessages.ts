@@ -53,18 +53,23 @@ export const useChatMessages = (chatId: string | undefined) => {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         const loop = true;
-        while (loop) {
+        while (loop)
+        {
             const { value, done } = await reader.read();
             if (done) {
                 break;
             }
-            const decodedChunk = decoder.decode(value, { stream: true });
-            result += decodedChunk;
+            const decodedChunk = decoder.decode(value);
+            const chunk = JSON.parse(decodedChunk);
+            result += chunk.message.content
+            debugger;
             setMessages(prev => {
                 const updated = [...prev];
                 updated[updated.length - 1] = {
                     role: 'assistant',
-                    content: result
+                    content: result,
+                    followupquestions:chunk.context.followup_questions
+
                 };
                 return updated;
             });
