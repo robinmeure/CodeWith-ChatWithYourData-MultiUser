@@ -2,7 +2,7 @@
 
 namespace WebApi.Helpers
 {
-    public static class Utitlities
+    public static class Utilities
     {
         internal static string SanitizeFileName(string fileName)
         {

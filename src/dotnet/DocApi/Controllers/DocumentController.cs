@@ -86,12 +86,23 @@ namespace DocApi.Controllers
                 return BadRequest("No files uploaded.");
             }
 
+            // Define the maximum file size limit (e.g., 100 MB)
+            const long maxFileSize = 100 * 1024 * 1024;
+
             var uploadResults = new List<string>();
 
             foreach (var document in documents)
             {
                 try
                 {
+                    // Check if the file size exceeds the limit
+                    if (document.Length > maxFileSize)
+                    {
+                        _logger.LogWarning("File size exceeds the limit: {0}", document.FileName);
+                        uploadResults.Add($"File size exceeds the limit: {document.FileName}");
+                        continue;
+                    }
+
                     // check if the file extension is blocked
                     if (_blockedFileExtensions.Contains(document.FileName.Split('.').Last().ToLower()))
                     {

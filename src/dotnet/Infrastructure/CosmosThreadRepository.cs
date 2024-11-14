@@ -15,17 +15,25 @@ using System.Xml.Linq;
 using Thread = Domain.Thread;
 using Container = Microsoft.Azure.Cosmos.Container;
 using Microsoft.Azure.Cosmos.Linq;
+using Microsoft.Extensions.Configuration;
 
 namespace Infrastructure
 {
 
     public class CosmosThreadRepository : IThreadRepository
     {
+        private readonly CosmosClient _client;
+        private readonly IConfiguration _configuration;
         private Container _container;
 
-        public CosmosThreadRepository(Container cosmosDbContainer)
+        public CosmosThreadRepository(CosmosClient client, IConfiguration configuration)
         {
-            _container = cosmosDbContainer;
+            _client = client;
+            _configuration = configuration;
+
+            string databaseName = _configuration.GetValue<string>("CosmosDb:DatabaseName") ?? "chats";
+            string containerName = _configuration.GetValue<string>("CosmosDb:DocumentContainerName") ?? "threadhistory";
+            _container = _client.GetContainer(databaseName, containerName);
         }
 
         public async Task<List<ThreadMessage>> GetAllThreads(DateTime expirationDate)
