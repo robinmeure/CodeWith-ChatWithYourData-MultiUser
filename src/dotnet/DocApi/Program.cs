@@ -118,7 +118,9 @@ namespace DocApi
             builder.Services.AddSwaggerGen();
 
             // Auth
-            builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("AzureAd"));
+            builder.Services
+                .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+                .AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("AzureAd"));
 
             var app = builder.Build();
             app.UseSwagger();

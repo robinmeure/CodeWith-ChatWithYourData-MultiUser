@@ -10,6 +10,7 @@ using Microsoft.Identity.Client;
 using Microsoft.Identity.Web.Resource;
 using System.Reflection.Metadata;
 using System.Xml.Linq;
+using WebApi.Helpers;
 
 namespace DocApi.Controllers
 {
@@ -98,10 +99,13 @@ namespace DocApi.Controllers
                         continue;
                     }
 
+                    // Sanitize the filename to ensure it contains only ASCII characters
+                    var fileName = Utilities.SanitizeFileName(document.FileName);
+
                     _logger.LogInformation("Uploading document: {0}", document.FileName);
 
                     // First step is to upload the document to the blob storage
-                    DocsPerThread docsPerThread = await _documentStore.AddDocumentAsync(userId, document, threadId, _containerName);
+                    DocsPerThread docsPerThread = await _documentStore.AddDocumentAsync(userId, document, fileName, threadId, _containerName);
                     if (docsPerThread == null)
                     {
                         throw new Exception("File upload failed");
