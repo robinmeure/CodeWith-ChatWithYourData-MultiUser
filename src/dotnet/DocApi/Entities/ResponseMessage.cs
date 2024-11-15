@@ -1,6 +1,6 @@
 ﻿using System.Text.Json.Serialization;
 
-namespace WebApi.Helpers
+namespace WebApi.Entities
 {
     public record ResponseMessage(
         [property: JsonPropertyName("role")] string Role,

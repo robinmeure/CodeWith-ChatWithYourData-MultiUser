@@ -11,12 +11,13 @@ using Microsoft.Identity.Web.Resource;
 using Microsoft.Azure.Cosmos;
 using System.Text.Json;
 using WebApi.Helpers;
-using ResponseMessage = WebApi.Helpers.ResponseMessage;
+using ResponseMessage = WebApi.Entities.ResponseMessage;
 using System.Text.RegularExpressions;
+using WebApi.Entities;
 
 namespace DocApi.Controllers
 {
-   
+
     [Route("threads")]
     [Authorize]
     [ApiController]
@@ -31,10 +32,7 @@ namespace DocApi.Controllers
         private readonly VectorStoreTextSearch<IndexDoc> _search;
         private readonly PromptHelper _promptHelper;
 
-        public class MessageRequest
-        {
-            public string Message { get; set; }
-        }
+        
 
         public ThreadController(
             ILogger<ThreadController> logger,
@@ -56,8 +54,7 @@ namespace DocApi.Controllers
         [HttpGet("")]
         public async Task<IActionResult> GetThreads()
         {
-
-            string userId = HttpContext.User.FindFirst("http://schemas.microsoft.com/identity/claims/objectidentifier")?.Value;
+            string? userId = HttpContext.GetUserId();
 
             if (userId == null)
             {
@@ -75,8 +72,7 @@ namespace DocApi.Controllers
         [HttpPost("")]
         public async Task<IActionResult> CreateThread()
         {
-
-            string userId = HttpContext.User.FindFirst("http://schemas.microsoft.com/identity/claims/objectidentifier")?.Value;
+            string? userId = HttpContext.GetUserId();
 
             if (userId == null)
             {
@@ -101,9 +97,7 @@ namespace DocApi.Controllers
         [HttpDelete("{threadId}")]
         public async Task<IActionResult> DeleteThread([FromRoute] string threadId)
         {
-            _logger.LogInformation("Deleting thread in CosmosDb for threadId : {0}", threadId);
-
-            string userId = HttpContext.User.FindFirst("http://schemas.microsoft.com/identity/claims/objectidentifier")?.Value;
+            string? userId = HttpContext.GetUserId();
 
             if (userId == null)
             {
