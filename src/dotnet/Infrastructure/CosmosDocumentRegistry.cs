@@ -22,8 +22,8 @@ namespace Infrastructure
             _logger = logger;
             _client = client;
             _configuration = configuration;
-            string databaseName = _configuration.GetValue<string>("CosmosDb:DatabaseName") ?? "chats";
-            string containerName = _configuration.GetValue<string>("CosmosDb:DocumentContainerName") ?? "documentsperthread";
+            string databaseName = _configuration.GetValue<string>("Cosmos:DatabaseName") ?? "chats";
+            string containerName = _configuration.GetValue<string>("Cosmos:DocumentContainerName") ?? "documentsperthread";
 
             _container = _client.GetContainer(databaseName, containerName);
         }

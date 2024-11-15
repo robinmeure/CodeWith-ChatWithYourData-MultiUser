@@ -31,8 +31,8 @@ namespace Infrastructure
             _client = client;
             _configuration = configuration;
 
-            string databaseName = _configuration.GetValue<string>("CosmosDb:DatabaseName") ?? "chats";
-            string containerName = _configuration.GetValue<string>("CosmosDb:DocumentContainerName") ?? "threadhistory";
+            string databaseName = _configuration.GetValue<string>("Cosmos:DatabaseName") ?? "chats";
+            string containerName = _configuration.GetValue<string>("Cosmos:ThreadHistoryContainerName") ?? "threadhistory";
             _container = _client.GetContainer(databaseName, containerName);
         }
 
