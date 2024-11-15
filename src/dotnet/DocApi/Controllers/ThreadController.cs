@@ -12,6 +12,7 @@ using Microsoft.Azure.Cosmos;
 using System.Text.Json;
 using WebApi.Helpers;
 using ResponseMessage = WebApi.Helpers.ResponseMessage;
+using System.Text.RegularExpressions;
 
 namespace DocApi.Controllers
 {
@@ -135,6 +136,30 @@ namespace DocApi.Controllers
             return Ok(result);
         }
 
+        [HttpDelete("{threadId}/messages")]
+        public async Task<IActionResult> DeleteMessages([FromRoute] string threadId)
+        {
+            _logger.LogInformation("Deleting messages in CosmosDb for threadId : {0}", threadId);
+
+            string userId = HttpContext.User.FindFirst("http://schemas.microsoft.com/identity/claims/objectidentifier")?.Value;
+
+            if (userId == null)
+            {
+                return BadRequest();
+            }
+
+            bool result = await _threadRepository.DeleteMessages(userId, threadId);
+
+            if (result)
+            {
+                return Ok();
+            }
+
+            return BadRequest();
+
+        }
+
+
         [HttpPost("{threadId}/messages")]
         [Produces("application/json")]
         [Consumes("application/json")]
@@ -186,34 +211,10 @@ namespace DocApi.Controllers
                 }
 
                 string[]? followUpQuestionList = null;
-                if (suggestFollowupQuestions is true)
+                if (suggestFollowupQuestions)
                 {
-                    history.AddUserMessage($@"Generate three follow-up question based on the answer you just generated.
-                        # Answer
-                        {assistantResponse}
-
-                        # Format of the response
-                        Return the follow-up question as a json string list. Don't put your answer between ```json and ```, return the json string directly.
-                        e.g.
-                        [
-                            ""What is the deductible?"",
-                            ""What is the co-pay?"",
-                            ""What is the out-of-pocket maximum?""
-                        ]
-                    ");
-
                     var question = messageRequest.Message;
-
-                    var followUpQuestions = await completionService.GetChatMessageContentAsync(
-                        history,
-                        null,
-                        _kernel);
-
-                    var followUpQuestionsJson = followUpQuestions.Content ?? throw new InvalidOperationException("Failed to get search query");
-
-                    var followUpQuestionsObject = JsonSerializer.Deserialize<JsonElement>(followUpQuestionsJson);
-                    var followUpQuestionsList = followUpQuestionsObject.EnumerateArray().Select(x => x.GetString()!).ToList();
-                    followUpQuestionList = followUpQuestionsList.ToArray();
+                    followUpQuestionList = await _promptHelper.GenerateFollowUpQuestionsAsync(history, assistantResponse, question);
                 }
 
                 var responseMessage = new ResponseMessage("assistant", assistantResponse);
@@ -229,11 +230,24 @@ namespace DocApi.Controllers
 
                 return Ok(choice);
             }
+            catch (HttpOperationException httpOperationException)
+            {
+                _logger.LogError("An error occurred: {0}", httpOperationException.Message);
+                return RateLimitResponse(httpOperationException);
+            }
             catch (Exception ex)
             {
                 _logger.LogError("An error occurred: {0}", ex.Message);
             }
             return new EmptyResult();
+        }
+
+        internal IActionResult RateLimitResponse(HttpOperationException httpOperationException)
+        {
+            string message = httpOperationException.Message;
+            int retryAfterSeconds = Utilities.ExtractRetryAfterSeconds(message);
+            Response.Headers["retry-after"] = retryAfterSeconds.ToString();
+            return StatusCode(429, "Too many requests. Please try again later.");
         }
     }
 }

@@ -114,6 +114,33 @@ namespace Infrastructure
             return threads;
         }
 
+        public async Task<bool> DeleteMessages(string userId, string threadId)
+        {
+            bool isDeleted = false;
+            var messages = await GetMessagesAsync(userId, threadId);
+            foreach(ThreadMessage message in messages)
+            {
+                try
+                {
+                    await _container.DeleteItemAsync<ThreadMessage>(message.Id, new PartitionKey(userId));
+                }
+                catch (CosmosException ex)
+                {
+                    throw new Exception($"Failed to delete message: {ex.Message}", ex);
+                }
+                catch (Exception ex)
+                {
+                    throw new Exception($"An error occurred while deleting message: {ex.Message}", ex);
+                }
+                finally
+                {
+                    isDeleted = true;
+                }
+            }
+
+            return isDeleted;
+        }
+
         public async Task<bool> MarkThreadAsDeletedAsync(string userId, string threadId)
         {
             var fieldsToUpdate = new Dictionary<string, object>

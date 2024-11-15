@@ -62,7 +62,6 @@ export const useChatMessages = (chatId: string | undefined) => {
             const decodedChunk = decoder.decode(value);
             const chunk = JSON.parse(decodedChunk);
             result += chunk.message.content
-            debugger;
             setMessages(prev => {
                 const updated = [...prev];
                 updated[updated.length - 1] = {
@@ -87,11 +86,23 @@ export const useChatMessages = (chatId: string | undefined) => {
         return true;
     };
 
+    const deleteMessages = async () => {
+        if(!chatId) return false; 
+        const response = await chatService.deleteMessagesAsync({chatId: chatId, token: accessToken});
+        
+        if (!response) {
+            return false;
+        }
+        setMessages([]);
+        return true;
+    };
+
     return {
         chatPending,
         chatError,
         messages,
-        sendMessage
+        sendMessage,
+        deleteMessages  
     };
 
 }
