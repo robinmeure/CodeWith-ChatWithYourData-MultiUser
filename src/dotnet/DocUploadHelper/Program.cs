@@ -17,7 +17,7 @@ var builder = new ConfigurationBuilder()
 
 var configuration = builder.Build();
 
-var entry = new DocsPerThread
+var entry = new Domain.Cosmos.DocsPerThread
 {
     Deleted = false,
     DocumentName = "Brochure Elektrisch Rijden nieuw.pdf",

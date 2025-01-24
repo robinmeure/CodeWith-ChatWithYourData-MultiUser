@@ -1,13 +1,12 @@
 using System;
 using System.Collections.Generic;
-using Domain;
 using Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Thread = Domain.Thread;
+using Thread = Domain.Cosmos.Thread;
 
 namespace DocumentCleanUp;
 

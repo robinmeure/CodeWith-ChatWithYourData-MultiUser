@@ -5,7 +5,6 @@ import { MessageList } from './MessageList';
 import { ChatInput } from './ChatInput';
 import { DocumentViewer } from '../Documents/DocumentViewer';
 import { ChatHeader } from './ChatHeader';
-import React from 'react';
 
 const useClasses = makeStyles({
     root: {
@@ -44,8 +43,7 @@ export function ChatInterface({ selectedChatId }: chatInterfaceType) {
     const toasterId = useId("toaster");
     const { dispatchToast } = useToastController(toasterId);
     const [isDialogVisible, setIsDialogVisible] = useState(false);
-    const labelId: string = useId('dialogLabel');
-    const subTextId: string = useId('subTextLabel');
+
 
     const notify = (intent:ToastIntent, notification:string) =>
         dispatchToast(
@@ -78,19 +76,19 @@ export function ChatInterface({ selectedChatId }: chatInterfaceType) {
         else notify('success', "Chat cleared.");
     }
 
-    const cancelClearChat = () => {
-        setIsDialogVisible(false);
-    }
+    // const cancelClearChat = () => {
+    //     setIsDialogVisible(false);
+    // }
    
-    const modalProps = React.useMemo(
-        () => ({
-            titleAriaId: labelId,
-            subtitleAriaId: subTextId,
-            isBlocking: false,
-            styles: { main: { maxWidth: 450 }, backgroundColor:tokens.colorBrandBackground2},
-        }),
-        [labelId, subTextId],
-    );
+    // const modalProps = React.useMemo(
+    //     () => ({
+    //         titleAriaId: labelId,
+    //         subtitleAriaId: subTextId,
+    //         isBlocking: false,
+    //         styles: { main: { maxWidth: 450 }, backgroundColor:tokens.colorBrandBackground2},
+    //     }),
+    //     [labelId, subTextId],
+    // );
 
 
     return (
@@ -100,7 +98,7 @@ export function ChatInterface({ selectedChatId }: chatInterfaceType) {
                 {(selectedChatId) && (<ChatHeader selectedTab={selectedTab} setSelectedTab={setSelectedTab} />)}
                 {(selectedTab === "chat" && selectedChatId) && (
                     <>
-                         <Dialog open={isDialogVisible} onOpenChange={(event, data) => setIsDialogVisible(data.open)}>
+                         <Dialog open={isDialogVisible} onOpenChange={(_event, data) => setIsDialogVisible(data.open)}>
                             <DialogSurface>
                                 <DialogBody>
                                 <DialogTitle>Clear Messages</DialogTitle>

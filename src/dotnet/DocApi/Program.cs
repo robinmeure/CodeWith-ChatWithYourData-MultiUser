@@ -1,28 +1,21 @@
-using Azure;
 using Azure.Identity;
-using Azure.Search.Documents;
 using Azure.Search.Documents.Indexes;
-using Azure.Storage;
 using Infrastructure.Helpers;
 using Infrastructure;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Azure;
-using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.Data;
-using Microsoft.SemanticKernel.Connectors.AzureAISearch;
-using Microsoft.SemanticKernel.Connectors.AzureOpenAI;
-using DocApi.Utils;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Identity.Web;
 using Microsoft.AspNetCore.Http.Features;
 using WebApi.Extensions;
+using Infrastructure.Throttling;
 
 namespace DocApi
 {
     public class Program
     {
     
-    public static void Main(string[] args)
+        public static void Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
 
@@ -37,6 +30,13 @@ namespace DocApi
                 var blobConfig = builder.Configuration.GetSection("Storage");
                 var serviceUri = new Uri(blobConfig["ServiceUri"]);
                 clientBuilder.AddBlobServiceClient(serviceUri).WithCredential(azureCredential);
+            });
+
+            // this custom httpclient will ensure that we don't exceed the rate limits of the Azure OpenAI services
+            // e.g. it will respect the Retry-After header and wait before sending the next request
+            HttpClient httpClient = new HttpClient(new ThrottlingHandler(true)
+            {
+                InnerHandler = new HttpClientHandler()
             });
 
             // Setting up the Cosmosdb client
@@ -61,14 +61,14 @@ namespace DocApi
             });
 
             // Setting up the Semantic Kernel and AI Search with Vectors and Embeddings
-            builder.AddSemanticKernel(azureCredential, null);
-            builder.AddAzureAISearch(azureCredential, null);
+            builder.AddSemanticKernel(azureCredential, httpClient);
 
             // Setting up the interfaces and implentations to be used in the controllers
             builder.Services.AddSingleton<IDocumentRegistry, CosmosDocumentRegistry>();
             builder.Services.AddSingleton<IDocumentStore, BlobDocumentStore>();
             builder.Services.AddSingleton<ISearchService, AISearchService>();
             builder.Services.AddSingleton<IThreadRepository, CosmosThreadRepository>();
+            builder.Services.AddSingleton<IAIService, SemanticKernelService>();
 
             // file upload limit -- need to work on this, still limited to 30MB
             builder.Services.Configure<FormOptions>(options =>

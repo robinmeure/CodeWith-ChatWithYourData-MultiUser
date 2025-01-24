@@ -26,20 +26,7 @@ namespace WebApi.Helpers
 
        
 
-        internal static int ExtractRetryAfterSeconds(string message)
-        {
-            // Define a regular expression to match the retry duration in seconds
-            var regex = new Regex(@"Try again in (\d+) seconds", RegexOptions.IgnoreCase);
-            var match = regex.Match(message);
-
-            if (match.Success && int.TryParse(match.Groups[1].Value, out int retryAfterSeconds))
-            {
-                return retryAfterSeconds;
-            }
-
-            // Return a default value if the retry duration is not found
-            return 60; // Default to 60 seconds
-        }
+        
     }
 
 

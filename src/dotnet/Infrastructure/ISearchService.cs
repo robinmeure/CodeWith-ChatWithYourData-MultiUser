@@ -1,4 +1,5 @@
-﻿using Domain;
+﻿using Domain.Cosmos;
+using Domain.Search;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -14,4 +15,5 @@ public interface ISearchService
     Task<DocsPerThread> IsChunkingComplete(DocsPerThread docsPerThreads);
     Task<bool> StartIndexing();
     Task<bool> DeleteDocumentAsync(DocsPerThread document);
+    Task<List<IndexDoc>> GetSearchResultsAsync(string query, string threadId);
 }

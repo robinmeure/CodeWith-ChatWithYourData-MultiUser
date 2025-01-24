@@ -73,7 +73,7 @@ export function Message({ message, onFollowUp }: messageProps) {
 
     const answer = parseAnswer(message);
     const classes = useClasses();
-
+    debugger;
     return (
         <>
             <div id={message.id} className={message.role == "user" ? classes.userContainer : classes.assistantContainer}>
@@ -106,9 +106,10 @@ export function Message({ message, onFollowUp }: messageProps) {
                     </div>
                 )}
             </div>
-            {message.followupquestions && message.followupquestions.length > 0 && (
+            
+            {message.context?.followup_questions && message.context.followup_questions.length > 0 && (
                 <div className={classes.followUpContainer}>
-                    {message.followupquestions.map((question, index) => (
+                    {message.context.followup_questions.map((question, index) => (
                         <Button key={index} className={classes.followUpButton} onClick={() => onFollowUp(question)}>
                             {question}
                         </Button>

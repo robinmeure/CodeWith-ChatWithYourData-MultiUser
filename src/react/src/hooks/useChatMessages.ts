@@ -61,14 +61,15 @@ export const useChatMessages = (chatId: string | undefined) => {
             }
             const decodedChunk = decoder.decode(value);
             const chunk = JSON.parse(decodedChunk);
-            result += chunk.message.content
+            result += chunk.content;
             setMessages(prev => {
                 const updated = [...prev];
                 updated[updated.length - 1] = {
                     role: 'assistant',
-                    content: result,
-                    followupquestions:chunk.context.followup_questions
-
+                    content: chunk.content,
+                    context: chunk.context,
+                    id:chunk.id,
+                    created:chunk.created
                 };
                 return updated;
             });

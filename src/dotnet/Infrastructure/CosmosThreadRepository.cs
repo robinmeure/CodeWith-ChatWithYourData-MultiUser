@@ -1,6 +1,5 @@
 ﻿using Azure.Search.Documents.Models;
 using Azure.Storage.Blobs;
-using Domain;
 using Microsoft.Azure.Cosmos;
 using System;
 using System.Collections.Generic;
@@ -12,10 +11,11 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
-using Thread = Domain.Thread;
+using Thread = Domain.Cosmos.Thread;
 using Container = Microsoft.Azure.Cosmos.Container;
 using Microsoft.Azure.Cosmos.Linq;
 using Microsoft.Extensions.Configuration;
+using Domain.Cosmos;
 
 namespace Infrastructure
 {
@@ -185,7 +185,7 @@ namespace Infrastructure
 
         public async Task<bool> DeleteThreadAsync(string userId, string threadId)
         {
-            Domain.Thread thread = await _container.ReadItemAsync<Domain.Thread>(threadId, new PartitionKey(userId));
+            Thread thread = await _container.ReadItemAsync<Thread>(threadId, new PartitionKey(userId));
             if (thread == null)
             {
                 return false;
@@ -211,9 +211,9 @@ namespace Infrastructure
 
         }
 
-        public async Task<Domain.Thread> CreateThreadAsync(string userId)
+        public async Task<Thread> CreateThreadAsync(string userId)
         {
-            var newThread = new Domain.Thread
+            var newThread = new Thread
             {
                 Id = Guid.NewGuid().ToString(),
                 Type = "CHAT_THREAD",
@@ -222,7 +222,7 @@ namespace Infrastructure
                 Deleted = false //need to be set to false, otherwise the thread will not be returned in the GetThreadsAsync method (and object is not saved properly in cosmosb)
             };
 
-            var response = await _container.CreateItemAsync<Domain.Thread>(newThread, new PartitionKey(userId));
+            var response = await _container.CreateItemAsync<Thread>(newThread, new PartitionKey(userId));
             if (response.StatusCode != System.Net.HttpStatusCode.Created)
             {
                 throw new Exception("Failed to create a new thread.");
@@ -268,6 +268,16 @@ namespace Infrastructure
             };
 
             var response = await _container.CreateItemAsync<ThreadMessage>(newMessage, new PartitionKey(userId));
+            if (response.StatusCode != System.Net.HttpStatusCode.Created)
+            {
+                throw new Exception("Failed to create a new thread.");
+            }
+            return true;
+        }
+
+        public async Task<bool> PostMessageAsync(string userId, ThreadMessage message)
+        {
+            var response = await _container.CreateItemAsync<ThreadMessage>(message, new PartitionKey(userId));
             if (response.StatusCode != System.Net.HttpStatusCode.Created)
             {
                 throw new Exception("Failed to create a new thread.");

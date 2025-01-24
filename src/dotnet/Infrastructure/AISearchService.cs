@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Azure;
 using Azure.Identity;
@@ -9,9 +10,11 @@ using Azure.Search.Documents;
 using Azure.Search.Documents.Indexes;
 using Azure.Search.Documents.Indexes.Models;
 using Azure.Search.Documents.Models;
-using Domain;
+using Domain.Cosmos;
+using Domain.Search;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.SemanticKernel.Data;
 
 namespace Infrastructure
 {
@@ -103,6 +106,39 @@ namespace Infrastructure
             }
 
             return docsPerThreads;
+        }
+
+        public async Task<List<IndexDoc>> GetSearchResultsAsync(string query, string threadId)
+        {
+            List<IndexDoc> docs = new List<IndexDoc>();
+
+            SearchOptions searchOptions = new SearchOptions();
+            searchOptions = new SearchOptions
+            {
+                Size = 10,
+                Filter = $"thread_id eq '{threadId}'",
+                QueryType = SearchQueryType.Full,
+            };
+            searchOptions.VectorSearch = new()
+            {
+                Queries = {
+                        new VectorizableTextQuery(text: query)
+                        {
+                            KNearestNeighborsCount = 3,
+                            Fields = { "content_vector" },
+                            Exhaustive = true
+                        }
+                    },
+            };
+
+            SearchResults<IndexDoc> response = await _searchClient.SearchAsync<IndexDoc>(query, searchOptions);
+
+            await foreach (SearchResult<IndexDoc> searchResult in response.GetResultsAsync())
+            {
+                docs.Add(searchResult.Document);
+            }
+
+            return docs;
         }
     }
 }

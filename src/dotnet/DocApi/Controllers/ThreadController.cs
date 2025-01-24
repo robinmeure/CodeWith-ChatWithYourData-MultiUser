@@ -1,19 +1,19 @@
-using Domain;
 using Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.Data;
 using System.Text;
-using DocApi.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Identity.Web.Resource;
 using Microsoft.Azure.Cosmos;
 using System.Text.Json;
 using WebApi.Helpers;
-using ResponseMessage = WebApi.Entities.ResponseMessage;
 using System.Text.RegularExpressions;
-using WebApi.Entities;
+using System.Runtime.CompilerServices;
+using Domain.Cosmos;
+using Domain.Chat;
+using ResponseMessage = Domain.Chat.ResponseMessage;
 
 namespace DocApi.Controllers
 {
@@ -28,27 +28,22 @@ namespace DocApi.Controllers
         private readonly IThreadRepository _threadRepository;
         private readonly ILogger<ThreadController> _logger;
         private readonly IConfiguration _configuration;
-        private readonly Kernel _kernel;
-        private readonly VectorStoreTextSearch<IndexDoc> _search;
-        private readonly PromptHelper _promptHelper;
-
-        
+        private readonly IAIService _aiService;
+        private readonly ISearchService _search;
 
         public ThreadController(
             ILogger<ThreadController> logger,
             IThreadRepository cosmosThreadRepository,
             IConfiguration configuration,
-            Kernel kernel,
-            VectorStoreTextSearch<IndexDoc> search,
-            PromptHelper promptHelper
+            ISearchService search,
+            IAIService aIService
             )
         {
             _threadRepository = cosmosThreadRepository;
             _configuration = configuration;
             _logger = logger;
-            _kernel = kernel;
             _search = search;
-            _promptHelper = promptHelper;
+            _aiService = aIService;
         }
 
         [HttpGet("")]
@@ -63,7 +58,7 @@ namespace DocApi.Controllers
 
             _logger.LogInformation("Fetching threads from CosmosDb for userId : {0}", userId);
             
-            List<Domain.Thread> threads = await _threadRepository.GetThreadsAsync(userId);
+            List<Domain.Cosmos.Thread> threads = await _threadRepository.GetThreadsAsync(userId);
 
             _logger.LogInformation("Fetched threads from CosmosDb for userId : {0}", userId);
             return Ok(threads);
@@ -80,7 +75,7 @@ namespace DocApi.Controllers
             }
             _logger.LogInformation("Creating thread in CosmosDb for userId : {0}", userId);
 
-            Domain.Thread thread = await _threadRepository.CreateThreadAsync(userId);
+            Domain.Cosmos.Thread thread = await _threadRepository.CreateThreadAsync(userId);
 
             if(thread == null)
             {
@@ -160,7 +155,7 @@ namespace DocApi.Controllers
         public async Task<IActionResult> Post([FromRoute] string threadId, [FromBody] MessageRequest messageRequest)
         {
             bool suggestFollowupQuestions = true; // need to configure this
-
+            var thoughts = new List<Thoughts>();
             _logger.LogInformation("Adding thread message to CosmosDb for threadId : {0}", threadId);
 
             string userId = HttpContext.User.FindFirst("http://schemas.microsoft.com/identity/claims/objectidentifier")?.Value;
@@ -172,76 +167,72 @@ namespace DocApi.Controllers
 
             try
             {
+                // Create the user's question message
+                var question = new ThreadMessage
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    Type = "CHAT_MESSAGE",
+                    ThreadId = threadId,
+                    UserId = userId,
+                    Role = "user",
+                    Content = messageRequest.Message,
+                    Context = null,
+                    Created = DateTime.Now
+                };
 
                 List<ThreadMessage> messages = await _threadRepository.GetMessagesAsync(userId, threadId);
 
-                ChatHistory history = _promptHelper.BuildConversationHistory(messages, messageRequest.Message);
+                ChatHistory history = _aiService.BuildConversationHistory(messages, messageRequest.Message);
+                string rewrittenQuery = await _aiService.RewriteQueryAsync(history);
 
+                var searchResults = await _search.GetSearchResultsAsync(rewrittenQuery, threadId);
 
-                IChatCompletionService completionService = _kernel.GetRequiredService<IChatCompletionService>();
+                _aiService.AugmentHistoryWithSearchResults(history, searchResults);
 
-                string rewrittenQuery = await _promptHelper.RewriteQueryAsync(history);
+                var assistantAnswer = await _aiService.GetChatCompletion(history);
+                thoughts.Add(new Thoughts("Answer", assistantAnswer.Thoughts));
 
-                // Text search.
-                var filter = new TextSearchFilter().Equality("ThreadId", threadId);
-                var searchOptions = new TextSearchOptions()
-                {
-                    Filter = filter,
-                    Top = 3
-                };
-                KernelSearchResults<object> searchResults = await _search.GetSearchResultsAsync(rewrittenQuery, searchOptions);
-
-                await _promptHelper.AugmentHistoryWithSearchResults(history, searchResults);
-
-                var response = await completionService.GetChatMessageContentsAsync(
-                    chatHistory: history,
-                    kernel: _kernel
-                );
-
-                var assistantResponse = "";
-                foreach (var chunk in response)
-                {
-                    assistantResponse += chunk.Content;
-                }
-
-                string[]? followUpQuestionList = null;
+                // Get follow-up questions
+                string[] followUpQuestionList = null;
                 if (suggestFollowupQuestions)
                 {
-                    var question = messageRequest.Message;
-                    followUpQuestionList = await _promptHelper.GenerateFollowUpQuestionsAsync(history, assistantResponse, question);
+                    followUpQuestionList = await _aiService.GenerateFollowUpQuestionsAsync(
+                        history, assistantAnswer.Answer, messageRequest.Message);
                 }
 
-                var responseMessage = new ResponseMessage("assistant", assistantResponse);
-                var responseContext = new ResponseContext(FollowupQuestions: followUpQuestionList ?? Array.Empty<string>());
-                var choice = new ResponseChoice(
-                    Index: 0,
-                    Message: responseMessage,
-                    Context: responseContext,
-                    CitationBaseUrl: "https://localhost");
+                var responseMessage = new ResponseMessage("assistant", assistantAnswer.Answer);
+                var responseContext = new ResponseContext(
+                       FollowupQuestions: followUpQuestionList ?? Array.Empty<string>(),
+                       DataPointsContent: null,
+                       Thoughts: thoughts.ToArray());
 
-                await _threadRepository.PostMessageAsync(userId, threadId, messageRequest.Message, "user");
-                await _threadRepository.PostMessageAsync(userId, threadId, assistantResponse, "assistant");
+                var answer = new ThreadMessage
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    Type = "CHAT_MESSAGE",
+                    ThreadId = threadId,
+                    UserId = userId,
+                    Role = responseMessage.Role,
+                    Content = responseMessage.Content,
+                    Context = responseContext,
+                    Created = DateTime.Now
+                };
 
-                return Ok(choice);
+                // Post the messages to the repository
+                await _threadRepository.PostMessageAsync(userId, question);
+                await _threadRepository.PostMessageAsync(userId, answer);
+
+                return Ok(answer);
             }
             catch (HttpOperationException httpOperationException)
             {
                 _logger.LogError("An error occurred: {0}", httpOperationException.Message);
-                return RateLimitResponse(httpOperationException);
             }
             catch (Exception ex)
             {
                 _logger.LogError("An error occurred: {0}", ex.Message);
             }
             return new EmptyResult();
-        }
-
-        internal IActionResult RateLimitResponse(HttpOperationException httpOperationException)
-        {
-            string message = httpOperationException.Message;
-            int retryAfterSeconds = Utilities.ExtractRetryAfterSeconds(message);
-            Response.Headers["retry-after"] = retryAfterSeconds.ToString();
-            return StatusCode(429, "Too many requests. Please try again later.");
         }
     }
 }

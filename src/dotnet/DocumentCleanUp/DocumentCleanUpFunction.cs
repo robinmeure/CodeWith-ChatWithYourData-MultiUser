@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using Domain;
+using Domain.Cosmos;
 using Infrastructure;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;

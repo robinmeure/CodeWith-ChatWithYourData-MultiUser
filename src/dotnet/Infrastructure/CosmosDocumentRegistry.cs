@@ -1,4 +1,4 @@
-﻿using Domain;
+﻿using Domain.Cosmos;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Azure.Cosmos.Linq;
 using Microsoft.Extensions.Configuration;
