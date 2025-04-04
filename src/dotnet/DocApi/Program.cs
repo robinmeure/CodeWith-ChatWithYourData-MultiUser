@@ -8,9 +8,11 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Identity.Web;
 using Microsoft.AspNetCore.Http.Features;
 using WebApi.Extensions;
-using Infrastructure.Throttling;
+using Domain.Chat;
+using Azure.Monitor.OpenTelemetry.AspNetCore;
+using Microsoft.SemanticKernel.Connectors.AzureOpenAI;
 
-namespace DocApi
+namespace WebApi
 {
     public class Program
     {
@@ -23,20 +25,18 @@ namespace DocApi
             DefaultAzureCredentialOptions azureCredentialOptions = DefaultCredentialOptions.GetDefaultAzureCredentialOptions(builder.Environment.EnvironmentName);
 
             var azureCredential = new DefaultAzureCredential(azureCredentialOptions);
-            
+
+            builder.AddServiceDefaults();
+
+            // The following line enables Azure Monitor Distro.
+            builder.Services.AddOpenTelemetry().UseAzureMonitor();
+
             // Setting up the Azure Blob Storage client
             builder.Services.AddAzureClients(clientBuilder =>
             {
                 var blobConfig = builder.Configuration.GetSection("Storage");
                 var serviceUri = new Uri(blobConfig["ServiceUri"]);
                 clientBuilder.AddBlobServiceClient(serviceUri).WithCredential(azureCredential);
-            });
-
-            // this custom httpclient will ensure that we don't exceed the rate limits of the Azure OpenAI services
-            // e.g. it will respect the Retry-After header and wait before sending the next request
-            HttpClient httpClient = new HttpClient(new ThrottlingHandler(true)
-            {
-                InnerHandler = new HttpClientHandler()
             });
 
             // Setting up the Cosmosdb client
@@ -60,8 +60,17 @@ namespace DocApi
                 return new SearchIndexClient(serviceUri, azureCredential);
             });
 
-            // Setting up the Semantic Kernel and AI Search with Vectors and Embeddings
-            builder.AddSemanticKernel(azureCredential, httpClient);
+            // Setting up the Semantic Kernel and AI Search
+            builder.AddSemanticKernel(azureCredential);
+            builder.Services.AddSingleton(sp =>
+            {
+
+                var configuration = sp.GetRequiredService<IConfiguration>();
+                var endpoint = configuration["OpenAI:EndPoint"];
+                var model = configuration["OpenAI:ReasoningModel"];
+                // return new AzureOpenAIChatCompletionService(model, endpoint, azureCredential, httpClient: httpClient);
+                return new AzureOpenAIChatCompletionService(model, endpoint, azureCredential);
+            });
 
             // Setting up the interfaces and implentations to be used in the controllers
             builder.Services.AddSingleton<IDocumentRegistry, CosmosDocumentRegistry>();
@@ -69,6 +78,31 @@ namespace DocApi
             builder.Services.AddSingleton<ISearchService, AISearchService>();
             builder.Services.AddSingleton<IThreadRepository, CosmosThreadRepository>();
             builder.Services.AddSingleton<IAIService, SemanticKernelService>();
+
+            Settings settings = new Settings();
+            settings.AllowInitialPromptRewrite = false;
+            settings.AllowFollowUpPrompts = true;
+            settings.UseSemanticRanker = false;
+            settings.AllowInitialPromptToHelpUser = true;
+            settings.PredefinedPrompts = new List<PredefinedPrompt>()
+            {
+                new PredefinedPrompt()
+                {
+                    Id = "1",
+                    Name = "Default",
+                    Prompt = "You are a helpful assistant."
+                },
+                new PredefinedPrompt()
+                {
+                    Id = "2",
+                    Name = "Default with Semantic Ranker",
+                    Prompt = "You are a helpful assistant. Use semantic ranker to find the most relevant document."
+                }
+            };
+            settings.Seed = 0;
+            settings.Temperature = 1.0;
+
+            builder.Services.AddSingleton(settings);
 
             // file upload limit -- need to work on this, still limited to 30MB
             builder.Services.Configure<FormOptions>(options =>

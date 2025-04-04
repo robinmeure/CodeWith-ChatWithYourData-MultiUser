@@ -35,6 +35,22 @@ namespace Infrastructure
             string containerName = _configuration.GetValue<string>("Cosmos:ThreadHistoryContainerName") ?? "threadhistory";
             _container = _client.GetContainer(databaseName, containerName);
         }
+        public async Task<List<Thread>> GetAllThreads()
+        {
+            List<Thread> threads = new List<Thread>();
+            IQueryable<Thread> threadsQuery = _container
+                .GetItemLinqQueryable<Thread>(allowSynchronousQueryExecution: true);
+
+            var iterator = threadsQuery.ToFeedIterator();
+
+            while (iterator.HasMoreResults)
+            {
+                var response = await iterator.ReadNextAsync();
+                threads.AddRange(response);
+            }
+
+            return threads;
+        }
 
         public async Task<List<ThreadMessage>> GetAllThreads(DateTime expirationDate)
         {
@@ -94,6 +110,8 @@ namespace Infrastructure
 
             return threads;
         }
+
+
 
         public async Task<List<Thread>> GetThreadsAsync(string userId)
         {
@@ -162,7 +180,7 @@ namespace Infrastructure
             }
         }
 
-        internal async Task<bool> UpdateThreadFieldsAsync(string threadId, string userId, Dictionary<string, object> fieldsToUpdate)
+        public async Task<bool> UpdateThreadFieldsAsync(string threadId, string userId, Dictionary<string, object> fieldsToUpdate)
         {
             var patchOperations = new List<PatchOperation>();
 
@@ -283,6 +301,25 @@ namespace Infrastructure
                 throw new Exception("Failed to create a new thread.");
             }
             return true;
+        }
+
+        public async Task<Thread> GetThreadAsync(string userId, string threadId)
+        {
+            var messagesQuery = _container
+                .GetItemLinqQueryable<Thread>(allowSynchronousQueryExecution: true)
+                .Where(m => m.Id == threadId);
+
+            var iterator = messagesQuery.ToFeedIterator();
+
+            var messages = new List<Thread>();
+            while (iterator.HasMoreResults)
+            {
+                var response = await iterator.ReadNextAsync();
+                messages.AddRange(response);
+            }
+
+            return messages.FirstOrDefault();
+
         }
 
     }

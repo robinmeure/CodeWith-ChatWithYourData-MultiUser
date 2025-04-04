@@ -112,12 +112,12 @@ namespace Infrastructure
         {
             List<IndexDoc> docs = new List<IndexDoc>();
 
-            SearchOptions searchOptions = new SearchOptions();
-            searchOptions = new SearchOptions
+            SearchOptions searchOptions = new SearchOptions
             {
-                Size = 10,
+                Size = 100,
                 Filter = $"thread_id eq '{threadId}'",
-                QueryType = SearchQueryType.Full,
+                QueryType = SearchQueryType.Full
+                
             };
             searchOptions.VectorSearch = new()
             {
@@ -138,6 +138,37 @@ namespace Infrastructure
                 docs.Add(searchResult.Document);
             }
 
+            return docs;
+        }
+
+        public async Task<List<IndexDoc>> GetDocumentAsync(string documentId)
+        {
+            List<IndexDoc> docs = new List<IndexDoc>();
+
+            SearchOptions searchOptions = new SearchOptions
+            {
+                Size = 100,
+                Filter = $"document_id eq '{documentId}'",
+                QueryType = SearchQueryType.Full
+            };
+
+            SearchResults<IndexDoc> response = await _searchClient.SearchAsync<IndexDoc>("*", searchOptions);
+
+            await foreach (SearchResult<IndexDoc> searchResult in response.GetResultsAsync())
+            {
+                IndexDoc indexDoc = new IndexDoc()
+                {
+                    ChunkId = searchResult.Document.ChunkId,
+                    DocumentId = searchResult.Document.DocumentId,
+                    ThreadId = searchResult.Document.ThreadId,
+                    Content = searchResult.Document.Content,
+                    FileName = searchResult.Document.FileName,
+                };
+
+                docs.Add(indexDoc);
+            }
+
+            docs = docs.OrderBy(x => x.ChunkId).ToList();
             return docs;
         }
     }

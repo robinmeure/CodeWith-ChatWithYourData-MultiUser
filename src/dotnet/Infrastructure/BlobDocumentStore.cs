@@ -88,6 +88,33 @@ namespace Infrastructure
             return results;
         }
 
+        public async Task<IEnumerable<DocsPerThread>> GetAllDocumentsAsync(string folder)
+        {
+            BlobContainerClient containerClient = _blobServiceClient.GetBlobContainerClient(folder);
+            var results = new List<DocsPerThread>();
+
+            await foreach (BlobItem blob in containerClient.GetBlobsAsync())
+            {
+                var blobClient = containerClient.GetBlobClient(blob.Name);
+                var properties = await blobClient.GetPropertiesAsync();
+                var metadata = properties.Value.Metadata;
+
+                DocsPerThread document = new DocsPerThread()
+                {
+                    Id = metadata["documentId"],
+                    ThreadId = metadata["threadId"],
+                    DocumentName = metadata["originalFilename"],
+                    UserId = Guid.Empty.ToString(),
+                    FileSize = blob.Properties.ContentLength ?? 0,
+                    UploadDate = blob.Properties.CreatedOn.Value.DateTime
+                };
+
+                results.Add(document);
+            }
+
+            return results;
+        }
+
         public Task UpdateDocumentAsync(string documentName, string documentUri)
         {
             throw new NotImplementedException();

@@ -1,8 +1,8 @@
 import { IDocument } from "../models/Document";
+import { env } from "../config/env";
 
 export class DocumentService {
-
-    private readonly baseUrl = process.env.VITE_BACKEND_URL;
+    private readonly baseUrl = env.BACKEND_URL;
 
     public getDocumentsAsync = async (chatId: string, token: string): Promise<IDocument[]> => {
         try {

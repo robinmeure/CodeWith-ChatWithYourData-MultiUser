@@ -1,24 +1,55 @@
-import { Button, Table, TableBody, TableCell, TableCellLayout, TableHeader, TableHeaderCell, TableRow, makeStyles, tokens } from '@fluentui/react-components';
-import { Delete12Regular } from '@fluentui/react-icons/fonts';
+import { Button, Table, TableBody, TableCell, TableCellLayout, TableHeader, TableHeaderCell, TableRow, makeStyles, tokens, Dialog, DialogSurface, DialogBody, DialogContent, Spinner } from '@fluentui/react-components';
+import { Delete12Regular, DocumentText24Regular } from '@fluentui/react-icons/fonts';
 import { IDocument } from '../../models/Document';
+import { useState } from 'react';
+import { ChunkViewer } from '../admin/ChunkViewer';
+import { useAdminDocuments } from '../../hooks/useAdminDocuments';
 
 const useClasses = makeStyles({
     container: {
         display: 'flex',
         marginTop: tokens.spacingVerticalM,
+        width: '100%',
+        overflowX: 'auto'
     },
     deleteColumn: {
         display: 'flex',
+        gap: tokens.spacingHorizontalS,
         justifyContent: 'flex-end'
     },
     headerText: {
         fontWeight: tokens.fontWeightSemibold,
+    },
+    statusAvailable: {
+        color: tokens.colorPaletteGreenForeground1
+    },
+    statusPending: {
+        color: tokens.colorPaletteYellowForeground1
+    },
+    dialogSurface: {
+        maxWidth: '90vw !important',
+        width: '90vw !important',
+        height: '80vh !important'
+    },
+    dialogContent: {
+        height: 'calc(80vh - 80px)',
+        overflowY: 'auto'
+    },
+    loadingContainer: {
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '100%'
     }
 });
 
+// Enhanced columns with more fields from IDocument
 const columns = [
-    { columnKey: "fileName", label: "Document name" },
-    { columnKey: "status", label: "Status" }
+    { columnKey: "documentName", label: "Document Name" },
+    { columnKey: "fileSize", label: "Size" },
+    { columnKey: "uploadDate", label: "Upload Date" },
+    { columnKey: "status", label: "Status" },
+    { columnKey: "actions", label: "" }
 ];
 
 type documentGridProps = { 
@@ -27,49 +58,109 @@ type documentGridProps = {
 }
 
 export function DocumentGrid({ documents, deleteDocument } : documentGridProps) {
-
     const classes = useClasses();
+    const [showChunks, setShowChunks] = useState(false);
+    const [selectedDocument, setSelectedDocument] = useState<IDocument | null>(null);
+    const { documentChunks, handleSearch, isLoadingChunks } = useAdminDocuments();
+    const [loading, setLoading] = useState(false);
 
     const handleDelete = async (chatId: string, documentId: string) => {
         await deleteDocument({chatId: chatId, documentId: documentId});
     }
 
-    return (
-        <div className={classes.container}>
-            <Table
-                role="grid"
-                aria-label="File table"
-            >
-                <TableHeader>
-                    <TableRow>
-                        {columns.map((column) => (
-                            <TableHeaderCell key={column.columnKey} className={classes.headerText}>
-                                {column.label}
-                            </TableHeaderCell>
-                        ))}
-                        <TableHeaderCell />
-                    </TableRow>
-                </TableHeader>
+    const handleViewChunks = async (document: IDocument) => {
+        setSelectedDocument(document);
+        setLoading(true);
+        setShowChunks(true);
+        
+        try {
+            // Use the improved handleSearch function that doesn't rely on state updates
+            await handleSearch(document.id);
+        } finally {
+            setLoading(false);
+        }
+    };
 
-                <TableBody>
-                    {documents && documents.map((item) => (
-                        <TableRow key={item.id}>
-                            <TableCell tabIndex={0} role="gridcell">
-                                {item.documentName}
-                            </TableCell>
-                            <TableCell tabIndex={0} role="gridcell">
-                                {item.availableInSearchIndex ? "Available" : "Pending"}
-                            </TableCell>
-                           
-                            <TableCell role="gridcell">
-                                <TableCellLayout className={classes.deleteColumn}>
-                                    <Button icon={<Delete12Regular />} onClick={() => handleDelete(item.threadId, item.id)}/>
-                                </TableCellLayout>
-                            </TableCell>
+    // Helper function to format file size
+    const formatFileSize = (bytes: number): string => {
+        if (bytes < 1024) return bytes + ' B';
+        else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+        else return (bytes / 1048576).toFixed(1) + ' MB';
+    };
+
+    // Helper function to format date
+    const formatDate = (dateString: string): string => {
+        const date = new Date(dateString);
+        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+    };
+
+    return (
+        <>
+            <div className={classes.container}>
+                <Table
+                    role="grid"
+                    aria-label="Documents table"
+                >
+                    <TableHeader>
+                        <TableRow>
+                            {columns.slice(0, -1).map((column) => (
+                                <TableHeaderCell key={column.columnKey} className={classes.headerText}>
+                                    {column.label}
+                                </TableHeaderCell>
+                            ))}
+                            <TableHeaderCell />
                         </TableRow>
-                    ))}
-                </TableBody>
-            </Table>
-        </div>
+                    </TableHeader>
+
+                    <TableBody>
+                        {documents && documents.map((item) => (
+                            <TableRow key={item.id}>
+                                <TableCell tabIndex={0} role="gridcell">
+                                    {item.documentName}
+                                </TableCell>
+                                <TableCell tabIndex={0} role="gridcell">
+                                    {formatFileSize(item.fileSize)}
+                                </TableCell>
+                                <TableCell tabIndex={0} role="gridcell">
+                                    {formatDate(item.uploadDate)}
+                                </TableCell>
+                                <TableCell tabIndex={0} role="gridcell">
+                                    <span className={item.availableInSearchIndex ? classes.statusAvailable : classes.statusPending}>
+                                        {item.availableInSearchIndex ? "Available" : "Pending"}
+                                    </span>
+                                </TableCell>
+                                <TableCell role="gridcell">
+                                    <TableCellLayout className={classes.deleteColumn}>
+                                        <Button 
+                                            icon={<DocumentText24Regular />} 
+                                            onClick={() => handleViewChunks(item)} 
+                                            //disabled={!item.availableInSearchIndex} 
+                                            title={item.availableInSearchIndex ? "View document chunks" : "Document not yet processed"}
+                                        />
+                                        <Button icon={<Delete12Regular />} onClick={() => handleDelete(item.threadId, item.id)}/>
+                                    </TableCellLayout>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </div>
+
+            <Dialog open={showChunks} onOpenChange={(_, { open }) => setShowChunks(open)}>
+                <DialogSurface className={classes.dialogSurface}>
+                    <DialogBody>
+                        <DialogContent className={classes.dialogContent}>
+                            {loading || isLoadingChunks ? (
+                                <div className={classes.loadingContainer}>
+                                    <Spinner label="Loading document chunks..." />
+                                </div>
+                            ) : (
+                                <ChunkViewer chunks={documentChunks} />
+                            )}
+                        </DialogContent>
+                    </DialogBody>
+                </DialogSurface>
+            </Dialog>
+        </>
     );
 };

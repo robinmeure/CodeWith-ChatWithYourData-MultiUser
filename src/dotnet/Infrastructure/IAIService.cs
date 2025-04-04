@@ -1,6 +1,7 @@
 ﻿using Domain.Chat;
 using Domain.Cosmos;
 using Domain.Search;
+using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using System;
 using System.Collections.Generic;
@@ -17,5 +18,6 @@ namespace Infrastructure
         Task<string> RewriteQueryAsync(ChatHistory history);
         ChatHistory AugmentHistoryWithSearchResults(ChatHistory history, List<IndexDoc> searchResults);
         Task<AnswerAndThougthsResponse> GetChatCompletion(ChatHistory history);
+        IAsyncEnumerable<StreamingChatMessageContent> GetChatCompletionStreaming(ChatHistory history);
     }
 }

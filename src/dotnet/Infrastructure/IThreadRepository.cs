@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Thread = Domain.Cosmos.Thread;
 namespace Infrastructure;
 public interface IThreadRepository
 {
@@ -16,7 +17,10 @@ public interface IThreadRepository
     Task<bool> PostMessageAsync(string userId, string threadId, string message, string role);
     Task<bool> PostMessageAsync(string userId, ThreadMessage message);
     Task<List<ThreadMessage>> GetAllThreads(DateTime expirationDate);
+    Task<List<Thread>> GetAllThreads();
     Task<List<string>> GetAllThreadIds(DateTime expirationDate);
     Task<bool> MarkThreadAsDeletedAsync(string userId, string threadId);
     Task<bool> DeleteMessages(string userId, string threadId);
+    Task<bool> UpdateThreadFieldsAsync(string threadId, string userId, Dictionary<string, object> fieldsToUpdate);
+    Task<Thread> GetThreadAsync(string userId, string threadId);
 }

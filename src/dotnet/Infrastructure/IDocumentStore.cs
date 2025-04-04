@@ -15,5 +15,6 @@ public interface IDocumentStore
     Task<bool> DeleteDocumentAsync(string documentName, string folder);
     Task<bool> DocumentExistsAsync(string documentName, string folder);
     Task<IEnumerable<string>> GetDocumentsAsync(string threadId, string folder);
+    Task<IEnumerable<DocsPerThread>> GetAllDocumentsAsync(string folder);
     Task UpdateDocumentAsync(string documentName, string documentUri);
 }

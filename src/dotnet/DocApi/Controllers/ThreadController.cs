@@ -14,8 +14,11 @@ using System.Runtime.CompilerServices;
 using Domain.Cosmos;
 using Domain.Chat;
 using ResponseMessage = Domain.Chat.ResponseMessage;
+using Microsoft.Extensions.Logging;
+using Domain.Search;
+using Thread = Domain.Cosmos.Thread;
 
-namespace DocApi.Controllers
+namespace WebApi.Controllers
 {
 
     [Route("threads")]
@@ -30,13 +33,15 @@ namespace DocApi.Controllers
         private readonly IConfiguration _configuration;
         private readonly IAIService _aiService;
         private readonly ISearchService _search;
+        private readonly Settings _settings;
 
         public ThreadController(
             ILogger<ThreadController> logger,
             IThreadRepository cosmosThreadRepository,
             IConfiguration configuration,
             ISearchService search,
-            IAIService aIService
+            IAIService aIService,
+            Settings settings
             )
         {
             _threadRepository = cosmosThreadRepository;
@@ -44,7 +49,11 @@ namespace DocApi.Controllers
             _logger = logger;
             _search = search;
             _aiService = aIService;
+            _settings = settings;
         }
+
+
+       
 
         [HttpGet("")]
         public async Task<IActionResult> GetThreads()
@@ -52,9 +61,7 @@ namespace DocApi.Controllers
             string? userId = HttpContext.GetUserId();
 
             if (userId == null)
-            {
                 return BadRequest();
-            }
 
             _logger.LogInformation("Fetching threads from CosmosDb for userId : {0}", userId);
             
@@ -70,9 +77,8 @@ namespace DocApi.Controllers
             string? userId = HttpContext.GetUserId();
 
             if (userId == null)
-            {
                 return BadRequest();
-            }
+            
             _logger.LogInformation("Creating thread in CosmosDb for userId : {0}", userId);
 
             Domain.Cosmos.Thread thread = await _threadRepository.CreateThreadAsync(userId);
@@ -84,7 +90,7 @@ namespace DocApi.Controllers
 
             _logger.LogInformation("Created thread in CosmosDb for userId : {0}", userId);
             
-            await _threadRepository.PostMessageAsync(userId, thread.Id, "You are a helpful assistant that helps people find information.", "system");
+            //await _threadRepository.PostMessageAsync(userId, thread.Id, "You are a helpful assistant that helps people find information.", "system");
 
             return Ok(thread);
         }
@@ -95,33 +101,71 @@ namespace DocApi.Controllers
             string? userId = HttpContext.GetUserId();
 
             if (userId == null)
-            {
                 return BadRequest();
-            }
 
             bool result = await _threadRepository.MarkThreadAsDeletedAsync(userId, threadId);
 
             if (result)
-            {
                 return Ok();
-            } 
 
             return BadRequest();
            
+        }
+        [HttpPatch("{threadId}")]
+        public async Task<IActionResult> UpdateThread([FromRoute] string threadId, [FromBody]string title)
+        {
+            string? userId = HttpContext.GetUserId();
+
+            if (userId == null)
+                return BadRequest();
+
+            Dictionary<string, object> fieldsToUpdate = new Dictionary<string, object>
+            {
+                { "threadName", title }
+            };
+            bool success = await _threadRepository.UpdateThreadFieldsAsync(threadId, userId, fieldsToUpdate);
+            if (success)
+            {
+                Thread updatedThread = await _threadRepository.GetThreadAsync(userId, threadId);
+                return Ok(updatedThread);
+            }
+            return BadRequest();
         }
 
         [HttpGet("{threadId}/messages")]
         public async Task<IActionResult> Get([FromRoute] string threadId)
         {
             _logger.LogInformation("Fetching thread messages from CosmosDb for threadId : {0}", threadId);
-            string userId = HttpContext.User.FindFirst("http://schemas.microsoft.com/identity/claims/objectidentifier")?.Value;
-
+            string? userId = HttpContext.GetUserId();
             if (userId == null)
-            {
                 return BadRequest();
-            }
 
             List<ThreadMessage> result = await _threadRepository.GetMessagesAsync(userId, threadId);
+
+            if (result.Count <= 1)
+            {
+                // Let's start welcoming the user and see if we can jump start the conversation by adding some predefined prompts
+                string[] followUpQuestionList = new string[] { "Help me generate questions about the document", "Summarize the document" };
+
+                var responseMessage = new ResponseMessage("assistant", "Do you need help?");
+                var responseContext = new ResponseContext(
+                       FollowupQuestions: followUpQuestionList ?? Array.Empty<string>(),
+                       DataPointsContent: null,
+                       Thoughts: null);
+
+                var answer = new ThreadMessage
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    Type = "CHAT_MESSAGE",
+                    ThreadId = threadId,
+                    UserId = userId,
+                    Role = responseMessage.Role,
+                    Content = responseMessage.Content,
+                    Context = responseContext,
+                    Created = DateTime.Now
+                };
+                result.Add(answer);
+            }
             return Ok(result);
         }
 
@@ -154,85 +198,117 @@ namespace DocApi.Controllers
         [Consumes("application/json")]
         public async Task<IActionResult> Post([FromRoute] string threadId, [FromBody] MessageRequest messageRequest)
         {
-            bool suggestFollowupQuestions = true; // need to configure this
-            var thoughts = new List<Thoughts>();
-            _logger.LogInformation("Adding thread message to CosmosDb for threadId : {0}", threadId);
-
-            string userId = HttpContext.User.FindFirst("http://schemas.microsoft.com/identity/claims/objectidentifier")?.Value;
-
+            string? userId = HttpContext.GetUserId();
             if (userId == null)
-            {
-                return BadRequest();
-            }
+                return BadRequest("User ID is required.");
 
             try
             {
-                // Create the user's question message
-                var question = new ThreadMessage
-                {
-                    Id = Guid.NewGuid().ToString(),
-                    Type = "CHAT_MESSAGE",
-                    ThreadId = threadId,
-                    UserId = userId,
-                    Role = "user",
-                    Content = messageRequest.Message,
-                    Context = null,
-                    Created = DateTime.Now
-                };
-
-                List<ThreadMessage> messages = await _threadRepository.GetMessagesAsync(userId, threadId);
-
-                ChatHistory history = _aiService.BuildConversationHistory(messages, messageRequest.Message);
-                string rewrittenQuery = await _aiService.RewriteQueryAsync(history);
-
-                var searchResults = await _search.GetSearchResultsAsync(rewrittenQuery, threadId);
-
-                _aiService.AugmentHistoryWithSearchResults(history, searchResults);
-
-                var assistantAnswer = await _aiService.GetChatCompletion(history);
-                thoughts.Add(new Thoughts("Answer", assistantAnswer.Thoughts));
-
-                // Get follow-up questions
-                string[] followUpQuestionList = null;
-                if (suggestFollowupQuestions)
-                {
-                    followUpQuestionList = await _aiService.GenerateFollowUpQuestionsAsync(
-                        history, assistantAnswer.Answer, messageRequest.Message);
-                }
-
-                var responseMessage = new ResponseMessage("assistant", assistantAnswer.Answer);
-                var responseContext = new ResponseContext(
-                       FollowupQuestions: followUpQuestionList ?? Array.Empty<string>(),
-                       DataPointsContent: null,
-                       Thoughts: thoughts.ToArray());
-
-                var answer = new ThreadMessage
-                {
-                    Id = Guid.NewGuid().ToString(),
-                    Type = "CHAT_MESSAGE",
-                    ThreadId = threadId,
-                    UserId = userId,
-                    Role = responseMessage.Role,
-                    Content = responseMessage.Content,
-                    Context = responseContext,
-                    Created = DateTime.Now
-                };
-
-                // Post the messages to the repository
-                await _threadRepository.PostMessageAsync(userId, question);
-                await _threadRepository.PostMessageAsync(userId, answer);
+                var question = await CreateAndSaveUserMessage(userId, threadId, messageRequest.Message);
+                var history = await BuildConversationHistory(userId, threadId, messageRequest.Message);
+                string query = (_settings.AllowInitialPromptRewrite) ? await RewriteQuestion(history) : messageRequest.Message;
+                var searchResults = await PerformSearch(history, threadId, query);
+                var answer = await GenerateAndSaveAssistantResponse(userId, threadId, history, searchResults);
 
                 return Ok(answer);
             }
-            catch (HttpOperationException httpOperationException)
+            catch (HttpOperationException httpEx)
             {
-                _logger.LogError("An error occurred: {0}", httpOperationException.Message);
+                _logger.LogError("HTTP operation failed: {Message}", httpEx.Message);
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, "Service temporarily unavailable.");
             }
             catch (Exception ex)
             {
-                _logger.LogError("An error occurred: {0}", ex.Message);
+                _logger.LogError(ex, "Unexpected error processing message for thread {ThreadId}", threadId);
+                return StatusCode(StatusCodes.Status500InternalServerError, "An unexpected error occurred.");
             }
-            return new EmptyResult();
+        }
+
+        private async Task<ThreadMessage> CreateAndSaveUserMessage(string userId, string threadId, string message)
+        {
+            var question = new ThreadMessage
+            {
+                Id = Guid.NewGuid().ToString(),
+                Type = "CHAT_MESSAGE",
+                ThreadId = threadId,
+                UserId = userId,
+                Role = "user",
+                Content = message,
+                Context = null,
+                Created = DateTime.UtcNow
+            };
+
+            await _threadRepository.PostMessageAsync(userId, question);
+            return question;
+        }
+
+        private async Task<ChatHistory> BuildConversationHistory(string userId, string threadId, string message)
+        {
+            var messages = await _threadRepository.GetMessagesAsync(userId, threadId);
+            return _aiService.BuildConversationHistory(messages, message);
+        }
+
+        private async Task<string> RewriteQuestion(ChatHistory history)
+        {
+            string query = await _aiService.RewriteQueryAsync(history);
+            _logger.LogInformation("Query rewritten to: {Query}", query);
+
+            return query;
+        }
+
+        private async Task<List<IndexDoc>> PerformSearch(ChatHistory history, string query, string threadId)
+        {
+            var searchResults = await _search.GetSearchResultsAsync(threadId, query);
+            _aiService.AugmentHistoryWithSearchResults(history, searchResults);
+
+            return searchResults;
+        }
+
+        private async Task<ThreadMessage> GenerateAndSaveAssistantResponse(
+            string userId,
+            string threadId,
+            ChatHistory history,
+            List<IndexDoc> searchResults)
+        {
+            // Get the AI response
+            var assistantAnswer = await _aiService.GetChatCompletion(history);
+            if (assistantAnswer == null)
+            {
+                throw new InvalidOperationException("Failed to generate assistant response");
+            }
+
+            // Generate follow-up questions if enabled
+            var followUpQuestionList = _settings.AllowFollowUpPrompts
+                ? await _aiService.GenerateFollowUpQuestionsAsync(history, assistantAnswer.Answer, assistantAnswer.Answer)
+                : Array.Empty<string>();
+
+            // Create thoughts list
+            var thoughts = new List<Thoughts>();
+            if (!string.IsNullOrEmpty(assistantAnswer.Thoughts))
+            {
+                thoughts.Add(new Thoughts("Answer", assistantAnswer.Thoughts));
+            }
+
+            // Create the response message
+            var answer = new ThreadMessage
+            {
+                Id = Guid.NewGuid().ToString(),
+                Type = "CHAT_MESSAGE",
+                ThreadId = threadId,
+                UserId = userId,
+                Role = "assistant",
+                Content = assistantAnswer.Answer,
+                Context = new ResponseContext(
+                    FollowupQuestions: followUpQuestionList,
+                    DataPointsContent: null,
+                    Thoughts: thoughts.ToArray()),
+                Created = DateTime.UtcNow
+            };
+
+            // Save the response
+            await _threadRepository.PostMessageAsync(userId, answer);
+
+            return answer;
         }
     }
 }

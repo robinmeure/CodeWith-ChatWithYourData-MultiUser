@@ -12,7 +12,7 @@ using System.Reflection.Metadata;
 using System.Xml.Linq;
 using WebApi.Helpers;
 
-namespace DocApi.Controllers
+namespace WebApi.Controllers
 {
     [Route("/threads/{threadId}/documents")]
     [Authorize]
@@ -51,6 +51,8 @@ namespace DocApi.Controllers
             _blockedFileExtensions = new HashSet<string>(blockedExtensions.Select(ext => ext.ToLower()));
 
         }
+
+
 
         [HttpGet()]
         public async Task<IEnumerable<DocsPerThread>> Get([FromRoute] string threadId)

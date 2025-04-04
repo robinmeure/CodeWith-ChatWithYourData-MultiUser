@@ -41,6 +41,17 @@ export const useChats = () => {
         }
     });
 
+    const { mutateAsync: updateChatName } = useMutation({
+        mutationFn: ({chatId, name}: { chatId: string, name: string }) => 
+            chatService.updateChatNameAsync({chatId, name, token: accessToken}),
+        onError: () => {
+            console.log('Failed to update chat name.');
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['chats'] });
+        }
+    });
+
     const selectChat = (chatId?: string) => {
         if (chatId) {
             setSelectedChatId(chatId);
@@ -56,6 +67,7 @@ export const useChats = () => {
         selectChat,
         selectedChatId,
         addChat,
-        deleteChat
+        deleteChat,
+        updateChatName
     }
 }
