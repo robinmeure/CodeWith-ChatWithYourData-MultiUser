@@ -4,6 +4,18 @@ import { IIndexDoc } from "../models/IndexDoc";
 import { env } from "../config/env";
 import { ISetting } from "../models/Settings";
 
+// Add new HealthCheck interface
+export interface HealthCheck {
+    isHealthy: boolean;
+    timestamp: string;
+    components: {
+        [key: string]: {
+            isWorking: boolean;
+            message: string;
+        }
+    }
+}
+
 export class AdminService {
     private readonly baseUrl = env.BACKEND_URL;
 
@@ -88,6 +100,28 @@ export class AdminService {
             return updatedSettings;
         } catch (error) {
             console.error('Failed to update settings:', error);
+            throw error;
+        }
+    }
+
+    // Get health status of backend services
+    public getHealthCheckAsync = async (token: string): Promise<HealthCheck> => {
+        try {
+            const response = await fetch(`${this.baseUrl}/admin/check`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                }
+            });
+            if (!response.ok) {
+                throw new Error(`Error fetching health check: ${response.statusText}`);
+            }
+            const healthData: HealthCheck = await response.json();
+            console.log("Health check data:", healthData);
+            return healthData;
+        } catch (error) {
+            console.error('Failed to fetch health check:', error);
             throw error;
         }
     }

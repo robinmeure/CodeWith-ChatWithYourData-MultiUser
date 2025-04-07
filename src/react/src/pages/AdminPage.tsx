@@ -8,10 +8,12 @@ import {
 import { useState } from "react";
 import { useAdminDocuments } from "../hooks/useAdminDocuments";
 import { useSettings } from "../hooks/useSettings";
+import { useHealthCheck } from "../hooks/useHealthCheck";
 import { DocumentsTab } from "../components/admin/DocumentsTab";
 import { DocumentChunksTab } from "../components/admin/DocumentChunksTab";
 import { SettingsTab } from "../components/admin/SettingsTab";
 import { PredefinedPromptsTab } from "../components/admin/PredefinedPromptsTab";
+import { HealthTab } from "../components/admin/HealthTab";
 import { PredefinedPrompt } from "../models/Settings";
 import { useLayoutStyles } from "../styles/sharedStyles";
 
@@ -50,7 +52,7 @@ const useStyles = makeStyles({
 export const AdminPage = () => {
     const styles = useStyles();
     const layoutStyles = useLayoutStyles();
-    const [selectedTab, setSelectedTab] = useState<string>("documents");
+    const [selectedTab, setSelectedTab] = useState<string>("settings");
     
     const {
         allDocuments,
@@ -65,6 +67,9 @@ export const AdminPage = () => {
     //Settings state and handlers
     const { settings, updateSettings, isLoading: isLoadingSettings } = useSettings();
     
+    // Health check data and handlers - don't load immediately
+    const { healthData, isLoading: isLoadingHealth, error: healthError, refreshHealthCheck } = useHealthCheck(false);
+
     const handleSettingsUpdate = (newSettings: { 
         temperature: number; 
         seed: number;
@@ -101,6 +106,16 @@ export const AdminPage = () => {
         }
     };
 
+    const handleTabSelect = (_, data) => {
+        const newTab = data.value as string;
+        setSelectedTab(newTab);
+        
+        // Load health data when the health tab is selected
+        if (newTab === "health" && !healthData && !isLoadingHealth) {
+            refreshHealthCheck();
+        }
+    };
+
     if (isLoadingDocuments && selectedTab === "documents") {
         return <Spinner />;
     }
@@ -110,11 +125,12 @@ export const AdminPage = () => {
             <div className={styles.header}>
                 <h1>Admin Dashboard</h1>
                 
-                <TabList selectedValue={selectedTab} onTabSelect={(_, data) => setSelectedTab(data.value as string)}>
+                <TabList selectedValue={selectedTab} onTabSelect={handleTabSelect}>
+                    <Tab value="settings">Settings</Tab>
                     <Tab value="documents">Documents</Tab>
                     <Tab value="chunks">Document Chunks</Tab>
-                    <Tab value="settings">Settings</Tab>
                     <Tab value="prompts">Predefined Prompts</Tab>
+                    <Tab value="health">System Health</Tab>
                 </TabList>
             </div>
 
@@ -149,6 +165,15 @@ export const AdminPage = () => {
                         isLoading={isLoadingSettings || false}
                         prompts={settings?.predefinedPrompts || []}
                         onSavePrompts={handlePredefinePromptsUpdate}
+                    />
+                )}
+                
+                {selectedTab === "health" && (
+                    <HealthTab
+                        healthData={healthData}
+                        isLoading={isLoadingHealth}
+                        error={healthError}
+                        onRefresh={refreshHealthCheck}
                     />
                 )}
             </div>

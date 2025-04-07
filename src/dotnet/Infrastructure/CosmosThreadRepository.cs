@@ -288,7 +288,7 @@ namespace Infrastructure
             var response = await _container.CreateItemAsync<ThreadMessage>(newMessage, new PartitionKey(userId));
             if (response.StatusCode != System.Net.HttpStatusCode.Created)
             {
-                throw new Exception("Failed to create a new thread.");
+                throw new Exception("Failed to post message.");
             }
             return true;
         }
@@ -298,10 +298,20 @@ namespace Infrastructure
             var response = await _container.CreateItemAsync<ThreadMessage>(message, new PartitionKey(userId));
             if (response.StatusCode != System.Net.HttpStatusCode.Created)
             {
-                throw new Exception("Failed to create a new thread.");
+                throw new Exception("Failed to post message.");
             }
+
+            Dictionary<string, object> fieldsToUpdate = new Dictionary<string, object>
+            {
+                { "lastUpdated", DateTime.UtcNow }
+            };
+
+            await UpdateThreadFieldsAsync(message.ThreadId, userId, fieldsToUpdate);
+
             return true;
         }
+
+        
 
         public async Task<Thread> GetThreadAsync(string userId, string threadId)
         {

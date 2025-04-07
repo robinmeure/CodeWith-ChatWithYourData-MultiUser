@@ -11,13 +11,10 @@ namespace WebApi.Extensions
     {
         public static void AddSemanticKernel(this WebApplicationBuilder builder, DefaultAzureCredential azureCredential)
         {
-            var searchConfig = builder.Configuration.GetSection("Search");
             var openAIConfig = builder.Configuration.GetSection("OpenAI");
 
-            if (searchConfig != null && openAIConfig != null)
+            if (openAIConfig != null)
             {
-                Uri serviceUri = new Uri(searchConfig["EndPoint"]);
-                string? indexName = searchConfig["IndexName"];
                 string? endpoint = openAIConfig["EndPoint"];
                 string? completionModel = openAIConfig["CompletionModel"];
                 string? reasoningModel = openAIConfig["ReasoningModel"];
@@ -28,17 +25,14 @@ namespace WebApi.Extensions
                 var kernelBuilder = Kernel.CreateBuilder();
                 if (apiKey == null)
                 {
-                    kernelBuilder.AddAzureOpenAIChatCompletion(completionModel, endpoint, azureCredential);
+                    kernelBuilder.AddAzureOpenAIChatCompletion(completionModel, endpoint, azureCredential, serviceId:"completion");
+                    kernelBuilder.AddAzureOpenAIChatCompletion(reasoningModel, endpoint, azureCredential, serviceId: "reasoning");
                 }
                 else
                 {
-                    kernelBuilder.AddAzureOpenAIChatCompletion(completionModel, endpoint, apiKey);
+                    kernelBuilder.AddAzureOpenAIChatCompletion(completionModel, endpoint, apiKey, serviceId: "completion");
+                    kernelBuilder.AddAzureOpenAIChatCompletion(reasoningModel, endpoint, apiKey, serviceId: "reasoning");
                 }
-
-                kernelBuilder.Services.AddSingleton<SearchIndexClient>(
-                sp => new SearchIndexClient(
-                    serviceUri,
-                    azureCredential));
 
                 var kernel = kernelBuilder.Build();
                 builder.Services.AddSingleton(kernel);

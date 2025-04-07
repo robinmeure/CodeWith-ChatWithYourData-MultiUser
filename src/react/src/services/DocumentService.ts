@@ -1,5 +1,6 @@
 import { IDocument } from "../models/Document";
 import { env } from "../config/env";
+import { IIndexDoc } from "../models/IndexDoc";
 
 export class DocumentService {
     private readonly baseUrl = env.BACKEND_URL;
@@ -71,4 +72,23 @@ export class DocumentService {
             return false;
         }
     }
+
+    public getDocumentChunksAsync = async ({threadId, documentId, token}: {threadId: string, documentId: string, token: string}): Promise<IIndexDoc[]> => {
+        try {
+            const response = await fetch(`${this.baseUrl}/threads/${threadId}/documents/${documentId}/chunks`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            if (!response.ok) {
+                throw new Error(`Error fetching document chunks: ${response.statusText}`);
+            }
+           
+            const chunks: IIndexDoc[] = await response.json();
+            return chunks;
+        } catch (error) {
+            console.error('Failed to fetch document chunks:', error);
+            throw error;
+        }
+    };
 }

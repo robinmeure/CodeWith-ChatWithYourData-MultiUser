@@ -19,5 +19,8 @@ namespace Domain.Cosmos
 
         [JsonProperty(PropertyName = "deleted")]
         public bool Deleted { get; set; } = false;
+
+        [JsonProperty(PropertyName = "lastupdated")]
+        public DateTimeOffset? LastUpdated { get; set; } 
     }
 }

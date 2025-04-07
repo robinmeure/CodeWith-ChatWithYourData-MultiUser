@@ -52,7 +52,7 @@ namespace WebApi
                 return new CosmosClient(accountEndpoint, azureCredential, cosmosClientOptions);
             });
 
-            // Setting up the Search client
+            //Setting up the Search client
             builder.Services.AddSingleton(sp =>
             {
                 var configuration = sp.GetRequiredService<IConfiguration>();
@@ -62,15 +62,6 @@ namespace WebApi
 
             // Setting up the Semantic Kernel and AI Search
             builder.AddSemanticKernel(azureCredential);
-            builder.Services.AddSingleton(sp =>
-            {
-
-                var configuration = sp.GetRequiredService<IConfiguration>();
-                var endpoint = configuration["OpenAI:EndPoint"];
-                var model = configuration["OpenAI:ReasoningModel"];
-                // return new AzureOpenAIChatCompletionService(model, endpoint, azureCredential, httpClient: httpClient);
-                return new AzureOpenAIChatCompletionService(model, endpoint, azureCredential);
-            });
 
             // Setting up the interfaces and implentations to be used in the controllers
             builder.Services.AddSingleton<IDocumentRegistry, CosmosDocumentRegistry>();

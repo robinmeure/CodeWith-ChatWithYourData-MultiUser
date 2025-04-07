@@ -3,7 +3,9 @@ import { Delete12Regular, DocumentText24Regular } from '@fluentui/react-icons/fo
 import { IDocument } from '../../models/Document';
 import { useState } from 'react';
 import { ChunkViewer } from '../admin/ChunkViewer';
-import { useAdminDocuments } from '../../hooks/useAdminDocuments';
+import { DocumentService } from '../../services/DocumentService';
+import { useAuth } from '../../hooks/useAuth';
+import { IIndexDoc } from '../../models/IndexDoc';
 
 const useClasses = makeStyles({
     container: {
@@ -61,8 +63,10 @@ export function DocumentGrid({ documents, deleteDocument } : documentGridProps) 
     const classes = useClasses();
     const [showChunks, setShowChunks] = useState(false);
     const [selectedDocument, setSelectedDocument] = useState<IDocument | null>(null);
-    const { documentChunks, handleSearch, isLoadingChunks } = useAdminDocuments();
+    const [documentChunks, setDocumentChunks] = useState<IIndexDoc[]>([]);
     const [loading, setLoading] = useState(false);
+    const { accessToken } = useAuth();
+    const documentService = new DocumentService();
 
     const handleDelete = async (chatId: string, documentId: string) => {
         await deleteDocument({chatId: chatId, documentId: documentId});
@@ -74,8 +78,14 @@ export function DocumentGrid({ documents, deleteDocument } : documentGridProps) 
         setShowChunks(true);
         
         try {
-            // Use the improved handleSearch function that doesn't rely on state updates
-            await handleSearch(document.id);
+            const chunks = await documentService.getDocumentChunksAsync({
+                threadId: document.threadId,
+                documentId: document.id,
+                token: accessToken
+            });
+            setDocumentChunks(chunks);
+        } catch (error) {
+            console.error('Failed to fetch document chunks:', error);
         } finally {
             setLoading(false);
         }
@@ -150,7 +160,7 @@ export function DocumentGrid({ documents, deleteDocument } : documentGridProps) 
                 <DialogSurface className={classes.dialogSurface}>
                     <DialogBody>
                         <DialogContent className={classes.dialogContent}>
-                            {loading || isLoadingChunks ? (
+                            {loading ? (
                                 <div className={classes.loadingContainer}>
                                     <Spinner label="Loading document chunks..." />
                                 </div>

@@ -108,6 +108,18 @@ namespace Infrastructure
             return docsPerThreads;
         }
 
+        public async Task<long> GetSearchResultsCountAsync()
+        {
+            var searchOptions = new SearchOptions
+            {
+                Size = 1,
+                IncludeTotalCount = true,
+                Select = { "chunk_id", "document_id", "thread_id" },
+            };
+            SearchResults<SearchDocument> response = await _searchClient.SearchAsync<SearchDocument>("*", searchOptions);
+            return response.TotalCount ?? 0;
+        }
+
         public async Task<List<IndexDoc>> GetSearchResultsAsync(string query, string threadId)
         {
             List<IndexDoc> docs = new List<IndexDoc>();

@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.AzureOpenAI;
+using Microsoft.SemanticKernel.Connectors.OpenAI;
 using OpenAI.Chat;
 using System;
 using System.Collections.Generic;
@@ -20,8 +21,8 @@ namespace Infrastructure
     public class SemanticKernelService : IAIService
     {
         private readonly Kernel _kernel;
-        private readonly AzureOpenAIChatCompletionService _azureOpenAIChatCompletionService; //o1-3 model
-        private IChatCompletionService _chatCompletionService; //gpt4 model
+        private IChatCompletionService _chatCompletionService;
+        private IChatCompletionService _reasoningCompletionService;
         private readonly ILogger<SemanticKernelService> _logger;
         private readonly IConfiguration _configuration;
         private readonly Settings _settings;
@@ -30,12 +31,11 @@ namespace Infrastructure
             Kernel kernel,
             IConfiguration configuration,
             ILogger<SemanticKernelService> logger,
-            AzureOpenAIChatCompletionService azureOpenAIChatCompletionService,
             Settings settings)
         {
             _kernel = kernel;
-            _chatCompletionService = _kernel.GetRequiredService<IChatCompletionService>();
-            _azureOpenAIChatCompletionService = azureOpenAIChatCompletionService;
+            _chatCompletionService = _kernel.GetRequiredService<IChatCompletionService>("completion");
+            _reasoningCompletionService = _kernel.GetRequiredService<IChatCompletionService>("reasoning");
             _configuration = configuration;
             _logger = logger;
             _settings = settings;
@@ -70,12 +70,12 @@ namespace Infrastructure
         public async Task<string[]> GenerateFollowUpQuestionsAsync(ChatHistory history, string assistantResponse, string question)
         {
 
-            var executionSettings = new AzureOpenAIPromptExecutionSettings
+            var executionSettings = new OpenAIPromptExecutionSettings()
             {
-                ModelId = "gpt-4o",
                 ResponseFormat = typeof(FollowUpResponse),
                 Temperature = _settings.Temperature,
                 Seed = _settings.Seed,
+                ServiceId ="completion"
             };
 
             // Adding prompt for follow-up questions
@@ -90,7 +90,8 @@ namespace Infrastructure
             var chatResponse = await _chatCompletionService.GetChatMessageContentsAsync(
                                    executionSettings: executionSettings,
                                    chatHistory: history,
-                                   kernel: _kernel);
+                                   kernel: _kernel
+                                   );
 
             string processedResponse = ProcessChatResponse(chatResponse);
             var followUp = JsonSerializer.Deserialize<FollowUpResponse>(processedResponse);
@@ -99,11 +100,19 @@ namespace Infrastructure
 
         public async Task<string> RewriteQueryAsync(ChatHistory history)
         {
+            var executionSettings = new AzureOpenAIPromptExecutionSettings
+            {
+                Temperature = _settings.Temperature,
+                Seed = _settings.Seed,
+                ServiceId = "completion"
+            };
+
             string rewritePrompt = Prompts.GPT4Prompts.RewritePrompt;
             history.AddSystemMessage(rewritePrompt);
             var rewrittenResponse = await _chatCompletionService.GetChatMessageContentsAsync(
                 chatHistory: history,
-                kernel: _kernel);
+                kernel: _kernel,
+                executionSettings:executionSettings);
             
             // Remove the temporary system prompt
             if (history.Count > 0)
@@ -142,6 +151,7 @@ namespace Infrastructure
             {
                 Temperature = _settings.Temperature,
                 Seed = _settings.Seed,
+                ServiceId = "completion",
             };
             var streamingAnswer = _chatCompletionService.GetStreamingChatMessageContentsAsync(history, executionSettings, _kernel);
 
@@ -163,12 +173,13 @@ namespace Infrastructure
             {
                 Temperature = _settings.Temperature,
                 Seed = _settings.Seed,
+                ServiceId = "completion",
             };
 
             IReadOnlyList<Microsoft.SemanticKernel.ChatMessageContent> chatResponse = new List<Microsoft.SemanticKernel.ChatMessageContent>();
             try
             {
-                chatResponse = await _azureOpenAIChatCompletionService.GetChatMessageContentsAsync(
+                chatResponse = await _chatCompletionService.GetChatMessageContentsAsync(
                                     executionSettings: executionSettings,
                                     chatHistory: history,
                                     kernel: _kernel);

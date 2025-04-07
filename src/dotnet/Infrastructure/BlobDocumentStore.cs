@@ -95,23 +95,31 @@ namespace Infrastructure
 
             await foreach (BlobItem blob in containerClient.GetBlobsAsync())
             {
-                var blobClient = containerClient.GetBlobClient(blob.Name);
-                var properties = await blobClient.GetPropertiesAsync();
-                var metadata = properties.Value.Metadata;
-
-                DocsPerThread document = new DocsPerThread()
+                try
                 {
-                    Id = metadata["documentId"],
-                    ThreadId = metadata["threadId"],
-                    DocumentName = metadata["originalFilename"],
-                    UserId = Guid.Empty.ToString(),
-                    FileSize = blob.Properties.ContentLength ?? 0,
-                    UploadDate = blob.Properties.CreatedOn.Value.DateTime
-                };
+                    var blobClient = containerClient.GetBlobClient(blob.Name);
+                    var properties = await blobClient.GetPropertiesAsync();
+                    var metadata = properties.Value.Metadata;
 
-                results.Add(document);
+                    DocsPerThread document = new DocsPerThread()
+                    {
+                        Id = metadata["documentId"],
+                        ThreadId = metadata["threadId"],
+                        DocumentName = metadata["originalFilename"],
+                        UserId = Guid.Empty.ToString(),
+                        FileSize = blob.Properties.ContentLength ?? 0,
+                        UploadDate = blob.Properties.CreatedOn.Value.DateTime
+                    };
+
+                    results.Add(document);
+                }
+                catch (Exception ex)
+                {
+                    // Handle exceptions, such as missing metadata
+                    Console.WriteLine($"Error processing blob {blob.Name}: {ex.Message}");
+
+                }
             }
-
             return results;
         }
 

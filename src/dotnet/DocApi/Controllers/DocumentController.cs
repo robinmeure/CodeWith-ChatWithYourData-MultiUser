@@ -52,6 +52,20 @@ namespace WebApi.Controllers
 
         }
 
+        [HttpGet("{documentId}/chunks")]
+        public async Task<IActionResult> GetChunks([FromRoute] string documentId)
+        {
+            string userId = HttpContext.User.FindFirst("http://schemas.microsoft.com/identity/claims/objectidentifier")?.Value;
+
+            if (userId == null)
+            {
+                return Unauthorized();
+            }
+
+            var documents = await _searchService.GetDocumentAsync(documentId);
+
+            return Ok(documents);
+        }
 
 
         [HttpGet()]

@@ -66,6 +66,7 @@ namespace WebApi.Controllers
             _logger.LogInformation("Fetching threads from CosmosDb for userId : {0}", userId);
             
             List<Domain.Cosmos.Thread> threads = await _threadRepository.GetThreadsAsync(userId);
+            threads = threads.OrderByDescending(t => t.LastUpdated).ToList();
 
             _logger.LogInformation("Fetched threads from CosmosDb for userId : {0}", userId);
             return Ok(threads);
