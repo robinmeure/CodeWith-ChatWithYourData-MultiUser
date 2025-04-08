@@ -86,9 +86,16 @@ export function ChatInterface({ selectedChatId }: chatInterfaceType) {
     const chats = useChats();
 
     const handleCreateNewChat = async () => {
-        const newChatId = await chats.addChat();
-        if (newChatId) {
-            chats.selectChat(newChatId.id);
+        try {
+            // Simply call addChat without trying to capture and use the return value
+            // The useChats hook has an onSuccess handler that will handle selection
+            await chats.addChat();
+            
+            // Add a console log to help debug the issue
+            console.log("Chat created, selection should happen automatically");
+        } catch (error) {
+            notify('error', "Failed to create new chat.");
+            console.error("Error creating chat:", error);
         }
     };
 

@@ -23,8 +23,16 @@ export const useChats = () => {
             console.log('Failed to create a chat.');
         },
         onSuccess: (data) => {
+            // Make sure to invalidate queries first
             queryClient.invalidateQueries({ queryKey: ['chats'] });
-            selectChat(data.id);
+            
+            // Explicitly log and set the chat ID
+            console.log("Chat created successfully, ID:", data.id);
+            
+            // Use setTimeout to ensure this happens after React updates
+            setTimeout(() => {
+                selectChat(data.id);
+            }, 0);
         }
     });
 

@@ -11,6 +11,11 @@ using WebApi.Extensions;
 using Domain.Chat;
 using Azure.Monitor.OpenTelemetry.AspNetCore;
 using Microsoft.SemanticKernel.Connectors.AzureOpenAI;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using System.Text.Json;
+using System.Text;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace WebApi
 {
@@ -43,7 +48,7 @@ namespace WebApi
             builder.Services.AddSingleton(sp =>
             {
                 var configuration = sp.GetRequiredService<IConfiguration>();
-                var accountEndpoint = configuration["Cosmos:AccountEndpoint"];
+                var accountEndpoint = configuration["Cosmos:cvbc"];
                 var cosmosClientOptions = new CosmosClientOptions
                 {
                     ConnectionMode = ConnectionMode.Direct,
@@ -69,6 +74,12 @@ namespace WebApi
             builder.Services.AddSingleton<ISearchService, AISearchService>();
             builder.Services.AddSingleton<IThreadRepository, CosmosThreadRepository>();
             builder.Services.AddSingleton<IAIService, SemanticKernelService>();
+
+            // Add health checks
+            builder.Services.AddHealthChecks()
+                .AddCheck<CosmosHealthCheck>("cosmos_health_check", tags: new[] { "ready" })
+                .AddCheck<SearchServiceHealthCheck>("search_service_health_check", tags: new[] { "ready" })
+                .AddCheck<AIServiceHealthCheck>("ai_service_health_check", tags: new[] { "ready" });
 
             Settings settings = new Settings();
             settings.AllowInitialPromptRewrite = false;
@@ -131,7 +142,107 @@ namespace WebApi
 
             app.MapControllers();
 
+            // Configure health check endpoint with detailed response
+            app.MapHealthChecks("/health", new HealthCheckOptions
+            {
+                ResponseWriter = async (context, report) =>
+                {
+                    var result = JsonSerializer.Serialize(
+                        new
+                        {
+                            status = report.Status.ToString(),
+                            components = report.Entries.Select(e => new
+                            {
+                                component = e.Key,
+                                status = e.Value.Status.ToString(),
+                                description = e.Value.Description,
+                                error = e.Value.Exception?.Message
+                            })
+                        },
+                        new JsonSerializerOptions { WriteIndented = true });
+
+                    context.Response.ContentType = "application/json";
+                    await context.Response.WriteAsync(result);
+                }
+            });
+
             app.Run();
+        }
+    }
+
+    // Health check implementations
+    public class CosmosHealthCheck : IHealthCheck
+    {
+        private readonly CosmosClient _cosmosClient;
+        private readonly IConfiguration _configuration;
+
+        public CosmosHealthCheck(CosmosClient cosmosClient, IConfiguration configuration)
+        {
+            _cosmosClient = cosmosClient;
+            _configuration = configuration;
+        }
+
+        public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var databaseName = _configuration["Cosmos:DatabaseName"];
+                var database = _cosmosClient.GetDatabase(databaseName);
+                await database.ReadAsync(cancellationToken: cancellationToken);
+                return HealthCheckResult.Healthy("Cosmos DB connection is healthy.");
+            }
+            catch (Exception ex)
+            {
+                return HealthCheckResult.Unhealthy("Cosmos DB connection is unhealthy.", ex);
+            }
+        }
+    }
+
+    public class SearchServiceHealthCheck : IHealthCheck
+    {
+        private readonly ISearchService _searchService;
+
+        public SearchServiceHealthCheck(ISearchService searchService)
+        {
+            _searchService = searchService;
+        }
+
+        public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                // Call a lightweight operation to verify search service is working
+                await _searchService.IsHealthyAsync();
+                return HealthCheckResult.Healthy("Search service is healthy.");
+            }
+            catch (Exception ex)
+            {
+                return HealthCheckResult.Unhealthy("Search service is unhealthy.", ex);
+            }
+        }
+    }
+
+    public class AIServiceHealthCheck : IHealthCheck
+    {
+        private readonly IAIService _aiService;
+
+        public AIServiceHealthCheck(IAIService aiService)
+        {
+            _aiService = aiService;
+        }
+
+        public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                // Call a lightweight operation to verify AI service is working
+                await _aiService.IsHealthyAsync();
+                return HealthCheckResult.Healthy("AI service is healthy.");
+            }
+            catch (Exception ex)
+            {
+                return HealthCheckResult.Unhealthy("AI service is unhealthy.", ex);
+            }
         }
     }
 }

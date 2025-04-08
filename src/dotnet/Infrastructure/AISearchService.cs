@@ -183,5 +183,19 @@ namespace Infrastructure
             docs = docs.OrderBy(x => x.ChunkId).ToList();
             return docs;
         }
+
+        public async Task IsHealthyAsync()
+        {
+            try
+            {
+                // Attempt to get search stats to verify connection
+                await _searchClient.GetDocumentCountAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Health check failed for Search service");
+                throw new ServiceException("Search service health check failed", ex, ServiceType.SearchService);
+            }
+        }
     }
 }

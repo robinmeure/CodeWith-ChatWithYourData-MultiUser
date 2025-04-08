@@ -18,4 +18,10 @@ public interface ISearchService
     Task<List<IndexDoc>> GetSearchResultsAsync(string query, string threadId);
     Task<long> GetSearchResultsCountAsync();
     Task<List<IndexDoc>> GetDocumentAsync(string documentId);
+
+    /// <summary>
+    /// Performs a health check on the search service
+    /// </summary>
+    /// <returns>Task that completes when the health check is done</returns>
+    Task IsHealthyAsync();
 }

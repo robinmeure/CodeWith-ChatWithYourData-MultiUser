@@ -19,5 +19,11 @@ namespace Infrastructure
         ChatHistory AugmentHistoryWithSearchResults(ChatHistory history, List<IndexDoc> searchResults);
         Task<AnswerAndThougthsResponse> GetChatCompletion(ChatHistory history);
         IAsyncEnumerable<StreamingChatMessageContent> GetChatCompletionStreaming(ChatHistory history);
+
+        /// <summary>
+        /// Performs a health check on the AI service
+        /// </summary>
+        /// <returns>Task that completes when the health check is done</returns>
+        Task IsHealthyAsync();
     }
 }

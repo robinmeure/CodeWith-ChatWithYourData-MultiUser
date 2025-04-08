@@ -11,36 +11,36 @@ using System.Threading.Tasks;
 
 namespace Infrastructure
 {
-    internal class KernelMemoryService : IAIService
-    {
-        ChatHistory IAIService.AugmentHistoryWithSearchResults(ChatHistory history, List<IndexDoc> searchResults)
-        {
-            throw new NotImplementedException();
-        }
+    //internal class KernelMemoryService : IAIService
+    //{
+    //    ChatHistory IAIService.AugmentHistoryWithSearchResults(ChatHistory history, List<IndexDoc> searchResults)
+    //    {
+    //        throw new NotImplementedException();
+    //    }
 
-        ChatHistory IAIService.BuildConversationHistory(List<ThreadMessage> messages, string newMessage)
-        {
-            throw new NotImplementedException();
-        }
+    //    ChatHistory IAIService.BuildConversationHistory(List<ThreadMessage> messages, string newMessage)
+    //    {
+    //        throw new NotImplementedException();
+    //    }
 
-        Task<string[]> IAIService.GenerateFollowUpQuestionsAsync(ChatHistory history, string assistantResponse, string question)
-        {
-            throw new NotImplementedException();
-        }
+    //    Task<string[]> IAIService.GenerateFollowUpQuestionsAsync(ChatHistory history, string assistantResponse, string question)
+    //    {
+    //        throw new NotImplementedException();
+    //    }
 
-        Task<AnswerAndThougthsResponse> IAIService.GetChatCompletion(ChatHistory history)
-        {
-            throw new NotImplementedException();
-        }
+    //    Task<AnswerAndThougthsResponse> IAIService.GetChatCompletion(ChatHistory history)
+    //    {
+    //        throw new NotImplementedException();
+    //    }
 
-        IAsyncEnumerable<StreamingChatMessageContent> IAIService.GetChatCompletionStreaming(ChatHistory history)
-        {
-            throw new NotImplementedException();
-        }
+    //    IAsyncEnumerable<StreamingChatMessageContent> IAIService.GetChatCompletionStreaming(ChatHistory history)
+    //    {
+    //        throw new NotImplementedException();
+    //    }
 
-        Task<string> IAIService.RewriteQueryAsync(ChatHistory history)
-        {
-            throw new NotImplementedException();
-        }
-    }
+    //    Task<string> IAIService.RewriteQueryAsync(ChatHistory history)
+    //    {
+    //        throw new NotImplementedException();
+    //    }
+    //}
 }

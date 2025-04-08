@@ -203,6 +203,31 @@ namespace Infrastructure
             return response;
         }
 
+        public async Task IsHealthyAsync()
+        {
+            try
+            {
+                // Test kernel by asking a simple question
+                var prompt = "Test health check. Respond with 'OK'";
+                var chat = _chatCompletionService;
+
+                var history = new ChatHistory();
+                history.AddUserMessage(prompt);
+                
+                // Execute a minimal request to verify connectivity
+                var result = await chat.GetChatMessageContentAsync(history, executionSettings: null);
+                if (string.IsNullOrEmpty(result.Content))
+                {
+                    throw new Exception("AI service returned empty response");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Health check failed for AI service");
+                throw new ServiceException("AI service health check failed", ex, ServiceType.AIService);
+            }
+        }
+
         /// <summary>
         /// Processes chat message contents by accumulating the text and logging token usage.
         /// </summary>

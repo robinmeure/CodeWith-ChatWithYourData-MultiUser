@@ -106,13 +106,15 @@ export const AdminPage = () => {
         }
     };
 
-    const handleTabSelect = (_, data) => {
-        const newTab = data.value as string;
-        setSelectedTab(newTab);
-        
-        // Load health data when the health tab is selected
-        if (newTab === "health" && !healthData && !isLoadingHealth) {
-            refreshHealthCheck();
+    const handleTabSelect = (event: any, data: any) => {
+        // Check if we have a valid value before updating state
+        if (data && typeof data.value === 'string') {
+            setSelectedTab(data.value);
+            
+            // Load health data when the health tab is selected
+            if (data.value === "health" && !healthData && !isLoadingHealth) {
+                refreshHealthCheck();
+            }
         }
     };
 
