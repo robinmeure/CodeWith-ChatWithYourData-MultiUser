@@ -1,6 +1,6 @@
 # Chat With Your Data - Multi-User Edition
 
-Yet another enterprise-grade solution for AI-powered chat with your documents, enabling intelligent conversations with uploaded files.
+Yes, yet another sample repo on how to do "chat with your data" (RAG) in a multi user scenario where chat-threads are long lived ;)
 
 ## 🚀 Features
 
