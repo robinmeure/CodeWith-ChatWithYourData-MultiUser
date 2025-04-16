@@ -10,6 +10,9 @@ namespace Domain.Search
 {
     public record IndexDoc
     {
+        [JsonPropertyName("parent_id")]
+        public string? ParentId { get; init; }
+        
         [JsonPropertyName("chunk_id")]
         public required string ChunkId { get; init; }
 

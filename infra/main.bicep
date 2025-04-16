@@ -42,7 +42,7 @@ param functionAppName string = 'func-${uniqueString(resourceGroup().id)}'
 
 @maxLength(24)
 @description('Name of the storage account for the function app.')
-param functionAppStorageAccountName string = take('safunc${uniqueString(resourceGroup().id)}', 24)
+param functionAppStorageAccountName string = take('sa${uniqueString(resourceGroup().id)}func', 20)
 
 @description('Name of the cosmos DB account.')
 param cosmosAccountName string = 'cosmos-${uniqueString(resourceGroup().id)}'
@@ -397,6 +397,10 @@ resource backendAppSettings 'Microsoft.Web/sites/config@2022-09-01' = {
     'OpenAI:EndPoint': openAi.outputs.endpoint
     'OpenAI:EmbeddingModel': integratedVectorEmbeddingModelId
     'OpenAI:CompletionModel': completionModelName
+    'OpenAI:ReasoningModel': completionModelName
+    APPLICATIONINSIGHTS_CONNECTION_STRING: appInsightsFuntionApp.outputs.connectionString
+    'SPE:ContainerTypeId': ''
+    Settings:'{"AllowInitialPromptRewrite":false,"AllowFollowUpPrompts":true,"UseSemanticRanker":false,"AllowInitialPromptToHelpUser":true,"PredefinedPrompts":[{"Id":"1","Name":"Default","Prompt":"You are a helpful assistant."},{"Id":"2","Name":"Default with Semantic Ranker","Prompt":"You are a helpful assistant. Use semantic ranker to find the most relevant document."}],"Seed":0,"Temperature":1.0}'
   }
 }
 

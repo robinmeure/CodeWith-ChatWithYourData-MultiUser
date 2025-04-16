@@ -11,6 +11,9 @@ namespace Domain.Cosmos
         [JsonProperty(PropertyName = "threadId")]
         public required string ThreadId { get; set; }
 
+        [JsonProperty(PropertyName = "folder")]
+        public string? Folder { get; set; }
+
         [JsonProperty(PropertyName = "userId")]
         public required string UserId { get; set; }
 
@@ -31,5 +34,6 @@ namespace Domain.Cosmos
 
         [JsonProperty(PropertyName = "chunkId")]
         public string? ChunkId { get; set; }
+
     }
 }

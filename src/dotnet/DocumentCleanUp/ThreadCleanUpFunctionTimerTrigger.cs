@@ -1,6 +1,7 @@
 using System;
 using Domain;
 using Infrastructure;
+using Infrastructure.Interfaces;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;

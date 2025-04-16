@@ -102,11 +102,10 @@ export const AdminPage = () => {
                 predefinedPrompts: prompts
             };
             console.log("Updating predefined prompts:", updatedSettings);
-            updateSettings(updatedSettings);
-        }
+            updateSettings(updatedSettings);        }
     };
-
-    const handleTabSelect = (event: any, data: any) => {
+    
+    const handleTabSelect = (_event: React.SyntheticEvent, data: { value: unknown }) => {
         // Check if we have a valid value before updating state
         if (data && typeof data.value === 'string') {
             setSelectedTab(data.value);

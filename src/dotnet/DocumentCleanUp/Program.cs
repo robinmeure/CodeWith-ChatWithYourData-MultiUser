@@ -11,6 +11,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using System.Configuration;
 using DocumentCleanUp;
+using Infrastructure.Interfaces;
+using Infrastructure.Implementations.Cosmos;
+using Infrastructure.Implementations.Blob;
+using Infrastructure.Implementations.AISearch;
 
 var host = new HostBuilder()
     .ConfigureFunctionsWebApplication()

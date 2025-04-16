@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Domain.Cosmos;
 using Infrastructure;
+using Infrastructure.Interfaces;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;

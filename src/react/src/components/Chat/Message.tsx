@@ -81,7 +81,6 @@ const useClasses = makeStyles({
         alignItems: 'flex-end',
         marginTop: tokens.spacingVerticalM,
         marginLeft: 'auto',
-        marginRight: 'auto',
         maxWidth: '80%',
         gap: tokens.spacingVerticalS,
     },

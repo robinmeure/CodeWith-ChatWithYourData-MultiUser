@@ -7,7 +7,7 @@ $initialDirectory = Get-Location
 
 try {
     # Change to the react source directory
-    cd ..\src\dotnet\DocApi
+    cd ..\src\dotnet\WebApi
 
     # Run the build process
     dotnet publish --configuration Release

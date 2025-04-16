@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Domain.Chat
@@ -26,5 +27,60 @@ namespace Domain.Chat
         public required string Id { get; set; }
         public required string Name { get; set; }
         public required string Prompt { get; set; }
+    }
+
+
+
+    public class ThreadSafeSettings
+    {
+        private readonly ReaderWriterLockSlim _lock = new(LockRecursionPolicy.NoRecursion);
+        private Settings _settings;
+
+        public ThreadSafeSettings(Settings initialSettings)
+        {
+            _settings = initialSettings;
+        }
+
+        public Settings GetSettings()
+        {
+            _lock.EnterReadLock();
+            try
+            {
+                // Return a copy to prevent external modification
+                return new Settings
+                {
+                    AllowFollowUpPrompts = _settings.AllowFollowUpPrompts,
+                    AllowInitialPromptRewrite = _settings.AllowInitialPromptRewrite,
+                    UseSemanticRanker = _settings.UseSemanticRanker,
+                    AllowInitialPromptToHelpUser = _settings.AllowInitialPromptToHelpUser,
+                    PredefinedPrompts = _settings.PredefinedPrompts?.ToList(), // Create a new list
+                    Temperature = _settings.Temperature,
+                    Seed = _settings.Seed
+                };
+            }
+            finally
+            {
+                _lock.ExitReadLock();
+            }
+        }
+
+        public void UpdateSettings(Settings newSettings)
+        {
+            _lock.EnterWriteLock();
+            try
+            {
+                _settings.AllowFollowUpPrompts = newSettings.AllowFollowUpPrompts;
+                _settings.AllowInitialPromptRewrite = newSettings.AllowInitialPromptRewrite;
+                _settings.UseSemanticRanker = newSettings.UseSemanticRanker;
+                _settings.AllowInitialPromptToHelpUser = newSettings.AllowInitialPromptToHelpUser;
+                _settings.PredefinedPrompts = newSettings.PredefinedPrompts?.ToList(); // Create a new list
+                _settings.Temperature = newSettings.Temperature;
+                _settings.Seed = newSettings.Seed;
+            }
+            finally
+            {
+                _lock.ExitWriteLock();
+            }
+        }
     }
 }
