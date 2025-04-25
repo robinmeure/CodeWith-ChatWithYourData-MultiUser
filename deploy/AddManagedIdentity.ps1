@@ -9,13 +9,16 @@
 #>
 
 # Resource group containing the resources
-$resourceGroup = 'rg-foundry-3'
+$resourceGroup = 'rg-codewith-rag-2'
 
 # Managed identity's object ID in Azure AD
-$principalId = ''
+$principalId = 'b8450f9c-9e79-4dbb-8d29-c2c34d7537d8'
 
 # Subscription under which all resources belong
-$subscriptionId = ''
+$subscriptionId = '5b398137-467e-43bb-9c4b-a9de3fcb2c37'
+
+# Cosmos DB account name
+$cosmosDb = 'cosmos-5zdkf6tjrgugk'
 
 # List of Azure role IDs to be assigned
 # Each role corresponds to a specific service capability (OpenAI, Storage, Search, etc.)

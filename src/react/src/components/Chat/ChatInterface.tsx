@@ -6,9 +6,11 @@ import { MessageList } from './MessageList';
 import { ChatInput } from './ChatInput';
 import { DocumentViewer } from '../Documents/DocumentViewer';
 import { ChatHeader } from './ChatHeader';
+import { HeartbeatStatus } from './HeartbeatStatus';
 import { useSettings } from '../../hooks/useSettings';
 import { useLayoutStyles, useContainerStyles } from '../../styles/sharedStyles';
 import { useChats } from '../../hooks/useChats';
+import LoggingService from '../../services/LoggingService';
 
 const useClasses = makeStyles({
   root: {
@@ -71,12 +73,11 @@ type chatInterfaceType = {
     sidebarVisible?: boolean;
 }
 
-export function ChatInterface({ selectedChatId }: chatInterfaceType) {
-    const classes = useClasses();
+export function ChatInterface({ selectedChatId }: chatInterfaceType) {    const classes = useClasses();
     const layoutClasses = useLayoutStyles();
     const containerClasses = useContainerStyles();
     
-    const { messages, sendMessage, sendMessageStream, chatPending, deleteMessages } = useChatMessages(selectedChatId);
+    const { messages, sendMessage, sendMessageStream, sendCompliancyMessageStream, chatPending, deleteMessages, heartbeatStatus } = useChatMessages(selectedChatId);
     const { settings } = useSettings();
     const [userInput, setUserInput] = useState<string>("");
     const [selectedTab, setSelectedTab] = useState<string>("chat");
@@ -88,14 +89,13 @@ export function ChatInterface({ selectedChatId }: chatInterfaceType) {
     const handleCreateNewChat = async () => {
         try {
             // Simply call addChat without trying to capture and use the return value
-            // The useChats hook has an onSuccess handler that will handle selection
-            await chats.addChat();
+            // The useChats hook has an onSuccess handler that will handle selection            await chats.addChat();
             
             // Add a console log to help debug the issue
-            console.log("Chat created, selection should happen automatically");
+            LoggingService.log("Chat created, selection should happen automatically");
         } catch (error) {
             notify('error', "Failed to create new chat.");
-            console.error("Error creating chat:", error);
+            LoggingService.error("Error creating chat:", error);
         }
     };
 
@@ -105,12 +105,18 @@ export function ChatInterface({ selectedChatId }: chatInterfaceType) {
                 <ToastTitle>{notification}</ToastTitle>
             </Toast>,
             { position:'top-end', intent: intent, timeout: 5000 }
-        );
-
-    const submitMessage = async (message: string) => {
+        );    const submitMessage = async (message: string) => {
         if (selectedChatId && message) {
-            setUserInput("");
-            const success = await sendMessage({ message });
+            setUserInput("");            // Check if the message contains "review" to determine which endpoint to use
+            let success = false;
+            if (message.toLowerCase().includes("review")) {
+                LoggingService.log("Using compliancy endpoint for review message");
+                success = await sendCompliancyMessageStream({ message });
+            } else {
+                LoggingService.log("Using streaming endpoint for regular message");
+                success = await sendMessageStream({ message });
+            }
+            
             if (!success) notify('error', "Failed to send message.");
         }
     }
@@ -178,9 +184,9 @@ export function ChatInterface({ selectedChatId }: chatInterfaceType) {
                             value={userInput} 
                             setValue={setUserInput} 
                             onSubmit={() => submitMessage(userInput)} 
-                            clearChat={clearChat}
-                            predefinedPrompts={settings?.predefinedPrompts || []}
+                            clearChat={clearChat}                            predefinedPrompts={settings?.predefinedPrompts || []}
                         />
+                        <HeartbeatStatus heartbeatStatus={heartbeatStatus} />
                     </>
                 )}
                 {(selectedTab === "documents" && selectedChatId) && (<DocumentViewer chatId={selectedChatId} />)}

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -17,6 +18,7 @@ using Infrastructure.Interfaces;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.KernelMemory.MemoryStorage;
 using Microsoft.SemanticKernel.Data;
 
 namespace Infrastructure.Implementations.AISearch
@@ -53,15 +55,55 @@ namespace Infrastructure.Implementations.AISearch
             return true;
         }
 
-        public async Task IngestDocumentIntoIndex(List<IFormFile> documents, string threadId, string containerName, string userId)
+        public async IAsyncEnumerable<string> IngestIntoIndex(IEnumerable<IndexDoc> records, [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            // chunk
+            try
+            {
+                await _searchClient.IndexDocumentsAsync(
+                    IndexDocumentsBatch.Upload(records),
+                    new IndexDocumentsOptions { ThrowOnAnyError = true },
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
+            catch (RequestFailedException e)
+            {
+                throw new IndexNotFoundException(e.Message, e);
+            }
 
-            // vectorize
+            foreach (var record in records)
+            {
+                yield return record.ChunkId;
+            }
+        }
 
-            // upload results to search index
+        public async Task<bool> IngestExtractedDocumentIntoIndex(string extractedDocument, string documentId)
+        {
+            bool isSuccess = false;
+            // get the current document
+            var chunks = await GetDocumentAsync(documentId);
 
-            await _searchClient.UploadDocumentsAsync(documents);
+            IndexDocumentsBatch<IndexDoc> batch = new IndexDocumentsBatch<IndexDoc>();
+
+            // add the extract doc to each chunk
+            // perhaps we should think about this in terms of storage.. 
+            // e.g. create a new index that only holds the extracted doc or add a new item to the index with the same documentId 
+            foreach (var chunk in chunks)
+            {
+               chunk.Extract = extractedDocument;
+               var mergAction = IndexDocumentsAction.Merge(chunk);
+               batch.Actions.Add(mergAction);
+            }
+            
+            try
+            {
+                IndexDocumentsResult result = await _searchClient.IndexDocumentsAsync(batch);
+                isSuccess = true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error ingesting document data.");
+            }
+
+            return isSuccess;
         }
 
         public async Task<bool> DeleteDocumentAsync(DocsPerThread document)
@@ -112,11 +154,31 @@ namespace Infrastructure.Implementations.AISearch
                 {
                     Size = 1,
                     IncludeTotalCount = true,
-                    Select = { "chunk_id", "document_id", "thread_id" },
+                    Select = { "chunk_id", "document_id", "thread_id", "extract" },
                     Filter = string.Format("document_id eq '{0}'", doc.Id)
                 };
                 SearchResults<SearchDocument> response = await _searchClient.SearchAsync<SearchDocument>("*", searchOptions);
-                doc.AvailableInSearchIndex = response.TotalCount > 0;
+
+                bool isChunkFound = false;
+                bool isExtractFound = false;
+
+                var results = response.GetResultsAsync();
+
+                await foreach (SearchResult<SearchDocument> searchResult in results)
+                {
+                    if (searchResult.Document["chunk_id"] != null)
+                    {
+                        isChunkFound = true;
+                    }
+                    if (searchResult.Document["extract"] != null)
+                    {
+                        isExtractFound = true;
+                    }
+                    break;
+                }
+
+                doc.AvailableInSearchIndex = isChunkFound;
+                doc.ExtractAvailable = isExtractFound;
             }
 
             return docsPerThreads;
@@ -132,6 +194,53 @@ namespace Infrastructure.Implementations.AISearch
             };
             SearchResults<SearchDocument> response = await _searchClient.SearchAsync<SearchDocument>("*", searchOptions);
             return response.TotalCount ?? 0;
+        }
+
+        public async Task<List<IndexDoc>> GetExtractedResultsAsync(string threadId)
+        {
+            List<IndexDoc> docs = new List<IndexDoc>();
+
+            SearchOptions searchOptions = new SearchOptions
+            {
+                Size = 1,
+                Filter = $"thread_id eq '{threadId}'",
+                QueryType = SearchQueryType.Simple
+            };
+
+            SearchResults<IndexDoc> response = await _searchClient.SearchAsync<IndexDoc>("*", searchOptions);
+
+            await foreach (SearchResult<IndexDoc> searchResult in response.GetResultsAsync())
+            {
+                docs.Add(searchResult.Document);
+            }
+
+            var uniqueDocs = docs
+            .GroupBy(sr => sr.DocumentId)
+            .Select(g => g).FirstOrDefault()
+            .Distinct()
+            .ToList();
+
+            return uniqueDocs;
+           
+        }
+
+        public async Task<IndexDoc> GetExtractedResultsAsync(string threadId, string documentId)
+        {
+            SearchOptions searchOptions = new SearchOptions
+            {
+                Size = 1,
+                Filter = $"thread_id eq '{threadId}' and document_id eq '{documentId}'",
+                QueryType = SearchQueryType.Simple
+            };
+
+            SearchResults<IndexDoc> response = await _searchClient.SearchAsync<IndexDoc>("*", searchOptions);
+
+            await foreach (SearchResult<IndexDoc> searchResult in response.GetResultsAsync())
+            {
+                return searchResult.Document;
+            }
+
+            return null;
         }
 
         public async Task<List<IndexDoc>> GetSearchResultsAsync(string query, string threadId)

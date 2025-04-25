@@ -31,6 +31,8 @@ namespace Domain.Cosmos
 
         [JsonProperty(PropertyName = "availableInSearchIndex")]
         public bool AvailableInSearchIndex { get; set; } = false;
+        [JsonProperty(PropertyName = "extractAvailable")]
+        public bool ExtractAvailable { get; set; } = false;
 
         [JsonProperty(PropertyName = "chunkId")]
         public string? ChunkId { get; set; }

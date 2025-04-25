@@ -232,7 +232,8 @@ export class ChatService {
             }
             
             return response.data;
-        } catch (error) {
+        } 
+        catch (error) {
             console.error('Failed to create chat:', error);
             throw error; 
         }
@@ -317,6 +318,69 @@ export class ChatService {
         } 
         catch (error) {
             console.error('Failed to send message:', error);
+            throw error;
+        }
+    }    
+      public sendMessageStreamAsync = async ({chatId, message, token} : { 
+        chatId: string, 
+        message: string, 
+        token: string 
+    }): Promise<Response> => {
+        try {
+            // Use regular fetch for streaming responses with the new stream endpoint
+            const response = await fetch(`${this.baseUrl}/threads/${chatId}/messages/stream`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ message: message }),
+            });
+
+            if (!response.ok) {
+                throw new Error(`Error sending message stream: ${response.status} ${response.statusText}`);
+            }
+            
+            // Invalidate the messages cache for this chat
+            this.requestCache.delete(`messages_${chatId}_${token}`);
+            
+            // Return the response with the stream
+            // The stream will contain followupQuestions in the final message with final:true
+            // The stream processor will need to parse these from the 'data: {...}' events
+            return response;
+        } 
+        catch (error) {
+            console.error('Failed to send message stream:', error);
+            throw error;
+        }
+    }
+
+    public sendCompliancyMessageStreamAsync = async ({chatId, message, token} : { 
+        chatId: string, 
+        message: string, 
+        token: string 
+    }): Promise<Response> => {
+        try {
+            // Use regular fetch for streaming responses
+            const response = await fetch(`${this.baseUrl}/threads/${chatId}/messages/compliancy/stream`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ message: message }),
+            });
+
+            if (!response.ok) {
+                throw new Error(`Error sending compliancy message: ${response.status} ${response.statusText}`);
+            }
+            
+            // Invalidate the messages cache for this chat
+            this.requestCache.delete(`messages_${chatId}_${token}`);
+            return response;
+        } 
+        catch (error) {
+            console.error('Failed to send compliancy message:', error);
             throw error;
         }
     }

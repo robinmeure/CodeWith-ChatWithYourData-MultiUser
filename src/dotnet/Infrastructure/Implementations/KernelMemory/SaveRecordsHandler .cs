@@ -24,6 +24,7 @@ using Azure.Search.Documents.Indexes;
 using Microsoft.KernelMemory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Azure.Cosmos.Serialization.HybridRow.RecordIO;
+using Infrastructure.Interfaces;
 
 namespace Infrastructure.Implementations.KernelMemory;
 
@@ -31,7 +32,7 @@ public class SaveRecordsHandler : IPipelineStepHandler
 {
     private readonly IPipelineOrchestrator _orchestrator;
     private readonly ILogger<SaveRecordsHandler> _logger;
-    private readonly SearchIndexClient _searchIndexClient;
+    private readonly ISearchService _searchService;
     private readonly string _stepName = "save_memory_records";
 
     /// <inheritdoc />
@@ -47,14 +48,14 @@ public class SaveRecordsHandler : IPipelineStepHandler
     /// <param name="loggerFactory">Application logger factory</param>
     public SaveRecordsHandler(
         IPipelineOrchestrator orchestrator,
-        SearchIndexClient searchIndexClient,
+        ISearchService searchService,
         ILogger<SaveRecordsHandler> logger
         )
     {
         StepName = _stepName;
         _logger = logger;
         _orchestrator = orchestrator;
-        _searchIndexClient = searchIndexClient;
+        _searchService = searchService;
 
     }
 
@@ -191,24 +192,29 @@ public class SaveRecordsHandler : IPipelineStepHandler
         IEnumerable<IndexDoc> records,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        
-        var client = _searchIndexClient!.GetSearchClient(index);
+        var results =  _searchService.IngestIntoIndex(records, cancellationToken);
 
-        try
+        await foreach (var result in results)
         {
-            await client.IndexDocumentsAsync(
-                IndexDocumentsBatch.Upload(records),
-                new IndexDocumentsOptions { ThrowOnAnyError = true },
-                cancellationToken: cancellationToken).ConfigureAwait(false);
+            yield return result;
         }
-        catch (RequestFailedException e)
-        {
-            throw new IndexNotFoundException(e.Message, e);
-        }
+        //var client = _searchIndexClient!.GetSearchClient(index);
 
-        foreach (var record in records)
-        {
-            yield return record.ChunkId;
-        }
+        //try
+        //{
+        //    await client.IndexDocumentsAsync(
+        //        IndexDocumentsBatch.Upload(records),
+        //        new IndexDocumentsOptions { ThrowOnAnyError = true },
+        //        cancellationToken: cancellationToken).ConfigureAwait(false);
+        //}
+        //catch (RequestFailedException e)
+        //{
+        //    throw new IndexNotFoundException(e.Message, e);
+        //}
+
+        //foreach (var record in records)
+        //{
+        //    yield return record.ChunkId;
+        //}
     }
 }

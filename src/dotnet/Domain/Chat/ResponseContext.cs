@@ -5,7 +5,8 @@ namespace Domain.Chat
     public record ResponseContext(
         [property: JsonPropertyName("dataPointsContent")] SupportingContentRecord[]? DataPointsContent,
         [property: JsonPropertyName("followup_questions")] string[] FollowupQuestions,
-        [property: JsonPropertyName("thoughts")] Thoughts[] Thoughts);
+        [property: JsonPropertyName("thoughts")] Thoughts[]? Thoughts,
+        [property: JsonPropertyName("usageMetrics")] UsageMetrics? UsageMetrics);
 
     public record DataPoints([property: JsonPropertyName("text")] string[] Text)
     { }

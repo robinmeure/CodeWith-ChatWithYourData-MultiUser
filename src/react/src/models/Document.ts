@@ -7,5 +7,7 @@ export interface IDocument {
     uploadDate: string;
     deleted: boolean;
     availableInSearchIndex: boolean;
+    extractAvailable:boolean;
     chunkId: string | null;
+    extract: string | null;
 }

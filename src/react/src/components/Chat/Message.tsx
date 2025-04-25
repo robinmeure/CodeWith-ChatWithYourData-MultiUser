@@ -1,10 +1,11 @@
-import { Field, makeStyles, ProgressBar, tokens, Button, Badge, Divider } from '@fluentui/react-components';
+import { Field, makeStyles, ProgressBar, tokens, Button, Badge, Divider, Tooltip } from '@fluentui/react-components';
 import { Stack, Text } from '@fluentui/react'
 import { IChatMessage } from '../../models/ChatMessage';
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useTextStyles } from '../../styles/sharedStyles';
+import { BookInformation20Regular, CoinMultiple16Color, CoinStack16Filled, CoinStack16Regular, CurrencyDollarEuro16Regular, Info12Regular, TagLockAccent16Filled } from '@fluentui/react-icons';
 
 const useClasses = makeStyles({
     userContainer: {
@@ -242,6 +243,12 @@ export function Message({ message, onFollowUp }: messageProps) {
         }
     };
 
+    const formatUsageMetrics = (usage?: { inputTokens: number, outputTokens: number, totalTokens: number }) => {
+        if (!usage) return '';
+        
+        return `Tokens: ${usage.inputTokens} input, ${usage.outputTokens} output, ${usage.totalTokens} total`;
+    };
+
     return (
         <>
             <div id={message.id} className={message.role == "user" ? classes.userContainer : classes.assistantContainer}>
@@ -252,10 +259,15 @@ export function Message({ message, onFollowUp }: messageProps) {
                         </Field>
                     </div>
                 ) : (
-                    <div className={message.role == "user" ? classes.userTextContainer : classes.assistantTextContainer}>
-                        <div className={classes.roleLabel}>
-                            {message.role === "user" ? "You" : "AI Assistant"}
-                            {formatMessageDate(message.created)}
+                    <div className={message.role == "user" ? classes.userTextContainer : classes.assistantTextContainer}>                        <div className={classes.roleLabel}>                            
+                            {message.role === "user" ? (
+                                <>You{formatMessageDate(message.created)}</>
+                            ) : (
+                                <><span>{message.agentName || "AI Assistant"}{formatMessageDate(message.created)}</span>
+                                <Tooltip content={formatUsageMetrics(message.context?.usageMetrics)} relationship="description">
+                                    <span>  •  <Info12Regular/></span>
+                                </Tooltip></>
+                            )}
                         </div>
                        
                         <div className={classes.markdownContent}>

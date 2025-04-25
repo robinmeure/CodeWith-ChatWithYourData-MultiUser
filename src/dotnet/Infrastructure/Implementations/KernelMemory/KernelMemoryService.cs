@@ -1,6 +1,8 @@
 ﻿using Azure.Search.Documents;
 using Azure.Search.Documents.Indexes;
 using Domain.Cosmos;
+using Infrastructure.Implementations.AISearch;
+using Infrastructure.Interfaces;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -21,7 +23,7 @@ namespace Infrastructure.Implementations.KernelMemory
         private readonly ILogger<KernelMemoryService> _logger;
         private readonly IServiceProvider _services;
         private readonly string index = "onyourdata";
-        private readonly SearchIndexClient _searchIndexClient;
+        private readonly ISearchService _searchService;
      
         public KernelMemoryService(
             MemoryServerless memory,
@@ -33,7 +35,7 @@ namespace Infrastructure.Implementations.KernelMemory
             _memory = memory;
             _services = services;
 
-            _searchIndexClient = _services.GetService<SearchIndexClient>();
+            _searchService = _services.GetService<ISearchService>();
 
             _memory.Orchestrator.AddHandler<TextExtractionHandler>("extract_text");
             _memory.Orchestrator.AddHandler<TextPartitioningHandler>("split_text_in_partitions");
@@ -41,7 +43,7 @@ namespace Infrastructure.Implementations.KernelMemory
             
             var handler = new SaveRecordsHandler(
                 _memory.Orchestrator,
-                _searchIndexClient, 
+                _searchService, 
                 _services.GetService<ILogger<SaveRecordsHandler>>());
 
             _memory.Orchestrator.AddHandler(handler);

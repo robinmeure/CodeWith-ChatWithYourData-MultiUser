@@ -21,23 +21,6 @@ using System.Text.Json;
 
 namespace Infrastructure.Implementations.SPE
 {
-    public class Container
-    {
-        [JsonProperty(PropertyName = "id")]
-        public string Id { get; set; }
-        [JsonProperty(PropertyName = "displayName")]
-        public required string DisplayName { get; set; }
-        [JsonProperty(PropertyName = "description")]
-        public string? Description { get; set; }
-        [JsonProperty(PropertyName = "containerTypeId")]
-        public required string ContainerTypeId { get; set; }
-        [JsonProperty(PropertyName = "createdDateTime")]
-        public DateTime CreatedDateTime { get; set; }
-        [JsonProperty(PropertyName = "status")]
-        public required string Status { get; set; }
-        [JsonProperty(PropertyName = "size")]
-        public int Size { get; set; }
-    }
     public class MSGraphService
     {
         private readonly IConfiguration _configuration;
@@ -45,16 +28,21 @@ namespace Infrastructure.Implementations.SPE
         private readonly ILogger<MSGraphService> _logger;
         private const long SmallFileSizeBoundary = 4000000;
         private const string GraphContainersEndpoint = "beta/storage/fileStorage/containers";
+        private readonly GraphServiceClient _graphServiceClient;
 
         const string graphResource = "https://graph.microsoft.com";
 
         private HttpClient client = new HttpClient();
 
-        public MSGraphService(IConfiguration configuration, IHttpClientFactory httpClientFactory, ILogger<MSGraphService> logger)
+        public MSGraphService(IConfiguration configuration,
+            IHttpClientFactory httpClientFactory,
+            ILogger<MSGraphService> logger,
+            GraphServiceClient graphServiceClient)
         {
             _configuration = configuration;
             _httpClientFactory = httpClientFactory;
             _logger = logger;
+            _graphServiceClient = graphServiceClient;
             client.BaseAddress = new Uri("https://graph.microsoft.com");
         }
 
@@ -298,7 +286,7 @@ namespace Infrastructure.Implementations.SPE
             }
         }
 
-        public async Task<Drive> GetDrive(string accessToken, string driveId)
+        public async Task<Drive> GetDriveAsync(string accessToken, string driveId)
         {
             var graphServiceClient = getGraphClient(accessToken);
             Drive drive = await graphServiceClient.Drives[driveId]
@@ -342,7 +330,7 @@ namespace Infrastructure.Implementations.SPE
             return await response.Content.ReadFromJsonAsync<DriveItem>();
         }
 
-        public async Task<ICollection<DriveItem>> GetDriveRootItems(string accessToken, string driveId)
+        public async Task<ICollection<DriveItem>> GetDriveRootItemsAsync(string accessToken, string driveId)
         {
             string endPoint = $"/beta/drives/{driveId}/items/root/children";
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("bearer", accessToken);

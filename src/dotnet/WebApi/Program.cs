@@ -25,6 +25,14 @@ using Infrastructure.Implementations.AISearch;
 using Infrastructure.Implementations.Blob;
 using WebApi.HealthChecks;
 using WebApi.Helpers;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.Http.Extensions;
+using Microsoft.Graph;
+using Infrastructure.Implementations.SemanticKernel.Tools;
+using DocumentFormat.OpenXml.Office2016.Drawing.ChartDrawing;
+using Microsoft.SemanticKernel;
+using System.Net.Http;
 
 namespace WebApi
 {
@@ -42,9 +50,20 @@ namespace WebApi
 
             builder.AddServiceDefaults();
 
+            var httpClient = new HttpClient
+            {
+                Timeout = TimeSpan.FromMinutes(10),
+            };
+
+            // Add HTTP client configuration with extended timeout
+            builder.Services.AddHttpClient("LongTimeout", httpClient =>
+            {
+            });
+
             // The following line enables Azure Monitor Distro.
             builder.Services.AddOpenTelemetry().UseAzureMonitor();
 
+            builder.Services.AddSingleton<IConfiguration>(builder.Configuration);
             // Setting up the Cosmosdb client
             builder.Services.AddSingleton(sp =>
             {
@@ -70,29 +89,37 @@ namespace WebApi
             builder.Services.AddSingleton<IDocumentRegistry, CosmosDocumentRegistry>();
 
             // ---------- SharePoint Embedded Implementation ----------------
-            // builder.Services.AddScoped<IDocumentStore, SPEDocumentStore>(); // this makes use of SharePoint Embedded
-            // builder.Services.AddSingleton<MSGraphService>(); // this is needed to work with SharePoint Embedded
-            // -----------------------------------------------------
-            
+            builder.Services.AddScoped<IDocumentStore, SPEDocumentStore>(); // this makes use of SharePoint Embedded
+            builder.Services.AddScoped<GraphServiceClient>();
+            builder.Services.AddScoped<MSGraphService>(); // this is needed to work with SharePoint Embedded
+                                                          // -----------------------------------------------------
+
             // ---------- Azure Blob Implementation ----------------
             // Setting up the Azure Blob Storage client
-            builder.Services.AddAzureClients(clientBuilder =>
-            {
-                var blobConfig = builder.Configuration.GetSection("Storage");
-                var serviceUri = new Uri(blobConfig["ServiceUri"]);
-                clientBuilder.AddBlobServiceClient(serviceUri).WithCredential(azureCredential);
-            });
-            builder.Services.AddScoped<IDocumentStore, BlobDocumentStore>(); // thid makes use of Azure Blob Storage
+            //builder.Services.AddAzureClients(clientBuilder =>
+            //{
+            //    var blobConfig = builder.Configuration.GetSection("Storage");
+            //    var serviceUri = new Uri(blobConfig["ServiceUri"]);
+            //    clientBuilder.AddBlobServiceClient(serviceUri).WithCredential(azureCredential);
+            //});
+            //builder.Services.AddScoped<IDocumentStore, BlobDocumentStore>(); // thid makes use of Azure Blob Storage
             // -----------------------------------------------------
 
             // Setting up the Semantic Kernel and AI Search
-            builder.AddSemanticKernel(azureCredential);
-            builder.AddKernelMemory(azureCredential);
-
-            builder.Services.AddSingleton<ISearchService, AISearchService>();
+            builder.Services.AddSingleton(sp =>
+            {
+                string? endpoint = builder.Configuration["OpenAI:EndPoint"];
+                string? completionModel = builder.Configuration["OpenAI:CompletionModel"];
+                string? reasoningModel = builder.Configuration["OpenAI:ReasoningModel"];
+                string? embeddingModel = builder.Configuration["OpenAI:EmbeddingModel"];
+                var kernelBuilder = Kernel.CreateBuilder();
+                kernelBuilder.AddAzureOpenAIChatCompletion(completionModel, endpoint, azureCredential, serviceId: "completion", httpClient: httpClient);
+                kernelBuilder.AddAzureOpenAIChatCompletion(reasoningModel, endpoint, azureCredential, serviceId: "reasoning", httpClient: httpClient);
+                return kernelBuilder.Build();
+            });
+            builder.AddKernelMemory(azureCredential);            builder.Services.AddSingleton<ISearchService, AISearchService>();
             builder.Services.AddSingleton<IThreadRepository, CosmosThreadRepository>();
             builder.Services.AddSingleton<IAIService, SemanticKernelService>();
-            builder.Services.AddSingleton<IThreadService, ThreadService>();
 
             builder.Services.AddHttpClient();  //Enable direct http client calls
             // Add health checks
@@ -113,6 +140,7 @@ namespace WebApi
                 .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 .AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("AzureAd"))
                 .EnableTokenAcquisitionToCallDownstreamApi()
+                .AddMicrosoftGraph(builder.Configuration.GetSection("AzureAd"))
                 .AddInMemoryTokenCaches();
 
             // file upload limit -- need to work on this, still limited to 30MB
@@ -125,8 +153,6 @@ namespace WebApi
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
-
-           
 
             var app = builder.Build();
             app.UseSwagger();

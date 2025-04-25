@@ -1,8 +1,12 @@
 ﻿using Azure;
+using Azure.AI.OpenAI;
 using Azure.Identity;
 using Azure.Search.Documents.Indexes;
 using Infrastructure.Implementations.KernelMemory;
+using Infrastructure.Implementations.SemanticKernel.Tools;
+using Infrastructure.Interfaces;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.KernelMemory;
 using Microsoft.KernelMemory.Pipeline;
@@ -13,35 +17,7 @@ namespace WebApi.Extensions
 {
     public static class WebApplicationBuilderExtensions
     {
-        public static void AddSemanticKernel(this WebApplicationBuilder builder, DefaultAzureCredential azureCredential)
-        {
-            var openAIConfig = builder.Configuration.GetSection("OpenAI");
-            var searchConfig = builder.Configuration.GetSection("Search");
-
-            if (openAIConfig != null && searchConfig != null)
-            {
-                string? endpoint = openAIConfig["EndPoint"];
-                string? completionModel = openAIConfig["CompletionModel"];
-                string? reasoningModel = openAIConfig["ReasoningModel"];
-                string? embeddingModel = openAIConfig["EmbeddingModel"];
-                string? apiKey = openAIConfig["ApiKey"];
-
-                var kernelBuilder = Kernel.CreateBuilder();
-                if (apiKey == null)
-                {
-                    kernelBuilder.AddAzureOpenAIChatCompletion(completionModel, endpoint, azureCredential, serviceId: "completion");
-                    kernelBuilder.AddAzureOpenAIChatCompletion(reasoningModel, endpoint, azureCredential, serviceId: "reasoning");
-                }
-                else
-                {
-                    kernelBuilder.AddAzureOpenAIChatCompletion(completionModel, endpoint, apiKey, serviceId: "completion");
-                    kernelBuilder.AddAzureOpenAIChatCompletion(reasoningModel, endpoint, apiKey, serviceId: "reasoning");
-                }
-
-                var kernel = kernelBuilder.Build();
-                builder.Services.AddSingleton(kernel);
-            }
-        }
+       
 
         public static void AddKernelMemory(this WebApplicationBuilder builder, DefaultAzureCredential azureCredential)
         {
@@ -83,7 +59,7 @@ namespace WebApi.Extensions
                     // Get the required services from the service provider
                     var orchestrator = sp.GetRequiredService<IPipelineOrchestrator>();
                     var loggerFactory = sp.GetRequiredService<ILogger<SaveRecordsHandler>>();
-                    var searchClient = sp.GetRequiredService<SearchIndexClient>();
+                    var searchClient = sp.GetRequiredService<ISearchService>();
 
                     return new SaveRecordsHandler(
                         orchestrator,

@@ -20,15 +20,15 @@ using System.Net;
 using System.Runtime.ExceptionServices;
 using Infrastructure.Helpers;
 using Infrastructure.Interfaces;
-using System.ComponentModel.DataAnnotations; // For validation attributes
+using System.ComponentModel.DataAnnotations;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace WebApi.Controllers
 {
     [Route("threads")]
     [Authorize]
     [ApiController]
-    [RequiredScope("chat")]
-
+    [RequiredScope("chat")]    
     public class ThreadController : ControllerBase
     {
         private readonly IThreadRepository _threadRepository;
@@ -37,8 +37,8 @@ namespace WebApi.Controllers
         private readonly IAIService _aiService;
         private readonly ISearchService _search;
         private readonly ThreadSafeSettings _settings;
-        private readonly IThreadService _threadService;
-
+        private readonly IMemoryCache _memoryCache;
+        private readonly IDocumentRegistry _documentRegistry;
 
         public ThreadController(
             ILogger<ThreadController> logger,
@@ -47,7 +47,8 @@ namespace WebApi.Controllers
             ISearchService search,
             IAIService aIService,
             ThreadSafeSettings settings,
-            IThreadService threadService
+            IMemoryCache memoryCache,
+            IDocumentRegistry documentRegistry
             )
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -56,7 +57,8 @@ namespace WebApi.Controllers
             _search = search ?? throw new ArgumentNullException(nameof(search));
             _aiService = aIService ?? throw new ArgumentNullException(nameof(aIService));
             _settings = settings ?? throw new ArgumentNullException(nameof(settings));
-            _threadService = threadService;
+            _memoryCache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
+            _documentRegistry = documentRegistry ?? throw new ArgumentNullException(nameof(documentRegistry));
 
             _logger.LogInformation("ThreadController initialized successfully");
         }
@@ -268,7 +270,8 @@ namespace WebApi.Controllers
                     var responseMessage = new ResponseMessage("assistant", "Do you need help?");
                     var responseContext = new ResponseContext(
                            FollowupQuestions: followUpQuestionList ?? Array.Empty<string>(),
-                           DataPointsContent: null,
+                           DataPointsContent: null, 
+                           UsageMetrics: null,                        
                            Thoughts: System.Array.Empty<Thoughts>());
                     var answer = new ThreadMessage
                     {
@@ -364,11 +367,9 @@ namespace WebApi.Controllers
                 return BadRequest(new { error = "Message content is required." });
             }
 
-            _logger.LogInformation("Processing new message for threadId: {ThreadId}", threadId);
-
-            try
+            _logger.LogInformation("Processing new message for threadId: {ThreadId}", threadId);            try
             {
-                var answer = await _threadService.HandleUserMessageAsync(userId, threadId, messageRequest.Message, cancellationToken);
+                var answer = await HandleUserMessageAsync(userId, threadId, messageRequest.Message, cancellationToken);
                 _logger.LogInformation("Successfully processed message for threadId: {ThreadId}", threadId);
                 return Ok(answer);
             }
@@ -385,7 +386,7 @@ namespace WebApi.Controllers
             catch (HttpOperationException httpEx)
             {
                 _logger.LogError(httpEx, "HTTP operation failed: {Message}", httpEx.Message);
-                return StatusCode(StatusCodes.Status503ServiceUnavailable, 
+                return StatusCode((int)(httpEx.StatusCode ?? HttpStatusCode.InternalServerError), 
                     new { 
                         error = "Service temporarily unavailable", 
                         details = httpEx.Message,
@@ -402,6 +403,434 @@ namespace WebApi.Controllers
                         requestId = HttpContext.TraceIdentifier
                     });
             }
+        }        
+        
+        [HttpPost("{threadId}/messages/compliancy/stream")]
+        [Produces("text/event-stream")]
+        public async Task<IActionResult> StreamCompliancyResponse(
+            [FromRoute] string threadId, 
+            [FromBody] MessageRequest messageRequest, 
+            CancellationToken cancellationToken)
+        {
+            string? userId = HttpContext.GetUserId();
+            if (userId == null)
+            {
+                _logger.LogWarning("Stream compliancy called with null userId");
+                return BadRequest(new { error = "User ID is required." });
+            }
+
+            if (string.IsNullOrEmpty(threadId))
+            {
+                _logger.LogWarning("Stream compliancy called with null or empty threadId");
+                return BadRequest(new { error = "Thread ID is required." });
+            }
+
+            if (messageRequest == null || string.IsNullOrEmpty(messageRequest.Message))
+            {
+                _logger.LogWarning("Stream compliancy called with null or empty message");
+                return BadRequest(new { error = "Message content is required." });
+            }
+
+            _logger.LogInformation("Processing streaming compliancy response for threadId: {ThreadId}", threadId);
+
+            try
+            {
+                // Save the user's message
+                await _threadRepository.PostMessageAsync(
+                    userId,
+                    new ThreadMessage
+                    {
+                        Id = Guid.NewGuid().ToString(),
+                        ThreadId = threadId,
+                        UserId = userId,
+                        Role = "user",
+                        Content = messageRequest.Message,
+                        Type = "CHAT_MESSAGE",
+                        Created = DateTime.UtcNow
+                    },
+                    cancellationToken);
+
+                // Get search results
+                var history = _aiService.BuildConversationHistory(
+                    await _threadRepository.GetMessagesAsync(userId, threadId, cancellationToken), 
+                    messageRequest.Message);
+                    
+                var query = messageRequest.Message;
+
+                string uniqueExtractsString = string.Empty;
+                var extractedDocs = await _search.GetExtractedResultsAsync(threadId);
+                foreach (var extractedDoc in extractedDocs)
+                {
+                    uniqueExtractsString += string.Join(Environment.NewLine, extractedDoc.Extract);
+                }
+                
+                // Get the agent stream
+                //var stream = _aiService.GetCompliancyResponseStreamingAsync(threadId, searchResults, cancellationToken);
+
+                // Get the chatcompletion stream
+                var stream = _aiService.GetCompliancyResponseStreamingViaCompletionAsync(threadId, uniqueExtractsString, cancellationToken);
+
+                string finalContent = null;
+
+                // Process and send each chunk in the stream
+                await foreach (var chatResponse in stream.WithCancellation(cancellationToken))
+                {
+                    string payload = System.Text.Json.JsonSerializer.Serialize(
+                        new { role = chatResponse.Role.ToString(), content = chatResponse.Content, final = false });
+                    await Response.WriteAsync($"data: {payload}\n\n", cancellationToken);
+                    await Response.Body.FlushAsync(cancellationToken);
+
+                    finalContent += chatResponse.Content;
+                }
+
+
+
+                // Send a final message with follow-up questions as part of the SSE stream
+                if (!string.IsNullOrWhiteSpace(finalContent))
+                {
+                    // Generate follow-up questions if enabled
+                    var followUpQuestionList = _settings.GetSettings().AllowFollowUpPrompts
+                        ? await _aiService.GenerateFollowUpQuestionsAsync(history, finalContent, finalContent)
+                        : Array.Empty<string>();
+
+                    // Send the final message with follow-up questions
+                    string finalPayload = System.Text.Json.JsonSerializer.Serialize(
+                        new
+                        {
+                            role = "assistant",
+                            content = finalContent,
+                            followupQuestions = followUpQuestionList,
+                            final = true
+                        });
+                    await Response.WriteAsync($"data: {finalPayload}\n\n", cancellationToken);
+                    await Response.Body.FlushAsync(cancellationToken);
+
+                    // Fire and forget saving the final assistant message to the database
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await _threadRepository.PostMessageAsync(
+                                userId,
+                                new ThreadMessage
+                                {
+                                    Id = Guid.NewGuid().ToString(),
+                                    ThreadId = threadId,
+                                    UserId = userId,
+                                    Role = "assistant",
+                                    Content = finalContent,
+                                    Type = "CHAT_MESSAGE",
+                                    Created = DateTime.UtcNow,
+                                    Context = new ResponseContext(
+                                        DataPointsContent: null,
+                                        FollowupQuestions: followUpQuestionList,
+                                        Thoughts: Array.Empty<Thoughts>(),
+                                        UsageMetrics: null)
+                                },
+                                CancellationToken.None);
+                            _logger.LogInformation("Successfully saved final compliancy response for threadId: {ThreadId}", threadId);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "Error saving final compliancy response for threadId: {ThreadId}", threadId);
+                        }
+                    });
+                }
+
+                return new EmptyResult();
+            
+            }
+            catch (ServiceException ex)
+            {
+                _logger.LogError(ex, "Service error in stream compliancy: {Type} - {Message}", ex.ServiceType, ex.Message);
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, 
+                    new { 
+                        error = $"Service unavailable: {ex.ServiceType}", 
+                        details = ex.Message,
+                        requestId = HttpContext.TraceIdentifier
+                    });
+            }
+            catch (HttpOperationException httpEx)
+            {
+                _logger.LogError(httpEx, "HTTP operation failed: {Message}", httpEx.Message);
+                return StatusCode((int)(httpEx.StatusCode ?? HttpStatusCode.InternalServerError), 
+                    new { 
+                        error = "Service temporarily unavailable", 
+                        details = httpEx.Message,
+                        requestId = HttpContext.TraceIdentifier
+                    });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unexpected error processing streaming compliancy for threadId: {ThreadId}", threadId);
+                return StatusCode(StatusCodes.Status500InternalServerError, 
+                    new { 
+                        error = "An unexpected error occurred", 
+                        details = ex.Message,
+                        requestId = HttpContext.TraceIdentifier
+                    });
+            }
         }
+
+        [HttpPost("{threadId}/messages/stream")]
+        [Produces("text/event-stream")]
+        public async Task<IActionResult> StreamChatResponse(
+            [FromRoute] string threadId, 
+            [FromBody] MessageRequest messageRequest, 
+            CancellationToken cancellationToken)
+        {
+            string? userId = HttpContext.GetUserId();
+            if (userId == null)
+            {
+                _logger.LogWarning("Stream chat called with null userId");
+                return BadRequest(new { error = "User ID is required." });
+            }
+
+            if (string.IsNullOrEmpty(threadId))
+            {
+                _logger.LogWarning("Stream chat called with null or empty threadId");
+                return BadRequest(new { error = "Thread ID is required." });
+            }
+
+            if (messageRequest == null || string.IsNullOrEmpty(messageRequest.Message))
+            {
+                _logger.LogWarning("Stream chat called with null or empty message");
+                return BadRequest(new { error = "Message content is required." });
+            }
+
+            _logger.LogInformation("Processing streaming chat response for threadId: {ThreadId}", threadId);
+
+            try
+            {                // Save the user's message
+                await _threadRepository.PostMessageAsync(
+                    userId,
+                    new ThreadMessage
+                    {
+                        Id = Guid.NewGuid().ToString(),
+                        ThreadId = threadId,
+                        UserId = userId,
+                        Role = "user",
+                        Content = messageRequest.Message,
+                        Type = "CHAT_MESSAGE",
+                        Created = DateTime.UtcNow
+                    },
+                    cancellationToken);
+
+                // Get conversation history
+                var history = await BuildConversationHistoryAsync(
+                    userId, threadId, messageRequest.Message, cancellationToken);
+                    
+                // Perform search with potential query rewrite
+                string query = (_settings.GetSettings().AllowInitialPromptRewrite)
+                    ? await RewriteQuestionAsync(history, cancellationToken)
+                    : messageRequest.Message;
+                    
+                var searchResults = await PerformSearchAsync(
+                    history, query, threadId, cancellationToken);
+
+                // Get streaming chat response
+                var stream = _aiService.GetChatCompletionStreaming(history);
+                
+                string finalContent = string.Empty;
+
+                // Process and send each chunk in the stream
+                await foreach (var chatResponse in stream.WithCancellation(cancellationToken))
+                {
+                    string payload = System.Text.Json.JsonSerializer.Serialize(
+                        new { role = chatResponse.Role.ToString(), content = chatResponse.Content, final = false });
+                    await Response.WriteAsync($"data: {payload}\n\n", cancellationToken);
+                    await Response.Body.FlushAsync(cancellationToken);
+                    
+                    finalContent += chatResponse.Content;
+                }                
+                
+
+
+                // Send a final message with follow-up questions as part of the SSE stream
+                if (!string.IsNullOrWhiteSpace(finalContent))
+                {
+                    // Generate follow-up questions if enabled
+                    var followUpQuestionList = _settings.GetSettings().AllowFollowUpPrompts
+                        ? await _aiService.GenerateFollowUpQuestionsAsync(history, finalContent, finalContent)
+                        : Array.Empty<string>();
+
+                    // Send the final message with follow-up questions
+                    string finalPayload = System.Text.Json.JsonSerializer.Serialize(
+                        new { 
+                            role = "assistant", 
+                            content = finalContent, 
+                            followupQuestions = followUpQuestionList,
+                            final = true 
+                        });
+                    await Response.WriteAsync($"data: {finalPayload}\n\n", cancellationToken);
+                    await Response.Body.FlushAsync(cancellationToken);
+                    
+                    // Fire and forget saving the final assistant message
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await _threadRepository.PostMessageAsync(
+                                userId,
+                                new ThreadMessage
+                                {
+                                    Id = Guid.NewGuid().ToString(),
+                                    ThreadId = threadId,
+                                    UserId = userId,
+                                    Role = "assistant",
+                                    Content = finalContent,
+                                    Type = "CHAT_MESSAGE",
+                                    Created = DateTime.UtcNow,
+                                    Context = new ResponseContext(
+                                        DataPointsContent: null,
+                                        FollowupQuestions: followUpQuestionList,
+                                        Thoughts: Array.Empty<Thoughts>(),
+                                        UsageMetrics: null)
+                                },
+                                CancellationToken.None);
+                            _logger.LogInformation("Successfully saved final chat response for threadId: {ThreadId}", threadId);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "Error saving final chat response for threadId: {ThreadId}", threadId);
+                        }
+                    });
+                }
+
+                return new EmptyResult();
+            }
+            catch (ServiceException ex)
+            {
+                _logger.LogError(ex, "Service error in stream chat: {Type} - {Message}", ex.ServiceType, ex.Message);
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, 
+                    new { 
+                        error = $"Service unavailable: {ex.ServiceType}", 
+                        details = ex.Message,
+                        requestId = HttpContext.TraceIdentifier
+                    });
+            }
+            catch (HttpOperationException httpEx)
+            {
+                _logger.LogError(httpEx, "HTTP operation failed: {Message}", httpEx.Message);
+                return StatusCode((int)(httpEx.StatusCode ?? HttpStatusCode.InternalServerError), 
+                    new { 
+                        error = "Service temporarily unavailable", 
+                        details = httpEx.Message,
+                        requestId = HttpContext.TraceIdentifier
+                    });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unexpected error processing streaming chat for threadId: {ThreadId}", threadId);
+                return StatusCode(StatusCodes.Status500InternalServerError, 
+                    new { 
+                        error = "An unexpected error occurred", 
+                        details = ex.Message,
+                        requestId = HttpContext.TraceIdentifier
+                    });
+            }
+        }
+
+        #region Message Processing Methods
+        
+        private async Task<ThreadMessage> CreateAndSaveUserMessage(string userId, string threadId, string message, CancellationToken cancellationToken)
+        {
+            var question = new ThreadMessage
+            {
+                Id = Guid.NewGuid().ToString(),
+                Type = "CHAT_MESSAGE",
+                ThreadId = threadId,
+                UserId = userId,
+                Role = "user",
+                Content = message,
+                Context = null,
+                Created = DateTime.UtcNow
+            };
+            await _threadRepository.PostMessageAsync(userId, question, cancellationToken);
+            return question;
+        }
+
+        private async Task<ChatHistory> BuildConversationHistoryAsync(string userId, string threadId, string message, CancellationToken cancellationToken)
+        {
+            string cacheKey = $"history:{userId}:{threadId}:{message}";
+            var messages = await _threadRepository.GetMessagesAsync(userId, threadId, cancellationToken);
+            var history = _aiService.BuildConversationHistory(messages, message);
+            return history;
+        }
+
+        private async Task<string> RewriteQuestionAsync(ChatHistory history, CancellationToken cancellationToken)
+        {
+            string query = await _aiService.RewriteQueryAsync(history);
+            _logger.LogInformation("Query rewritten to: {Query}", query);
+            return query;
+        }
+
+        private async Task<List<IndexDoc>> PerformSearchAsync(ChatHistory history, string query, string threadId, CancellationToken cancellationToken)
+        {
+            string sanitarizedQuery = System.Text.RegularExpressions.Regex.Replace(query, @"[^\w\s]", string.Empty)
+                .Replace("\r", " ")
+                .Replace("\n", " ")
+                .Replace("\t", " ");
+            sanitarizedQuery = System.Text.RegularExpressions.Regex.Replace(sanitarizedQuery, @"\s+", " ").Trim();
+            var searchResults = await _search.GetSearchResultsAsync(sanitarizedQuery, threadId);
+            _aiService.AugmentHistoryWithSearchResults(history, searchResults);
+            return searchResults;
+        }
+
+        private async Task<ThreadMessage> GenerateAndSaveAssistantResponseAsync(string userId, string threadId, ChatHistory history, List<IndexDoc> searchResults, CancellationToken cancellationToken)
+        {
+            var assistantAnswer = await _aiService.GetChatCompletion(history);
+            if (!assistantAnswer.IsSuccess)
+            {
+                if (assistantAnswer.Error.IsRateLimit)
+                {
+                    _logger.LogWarning("Rate limit exceeded for user {UserId} in thread {ThreadId}", userId, threadId);
+                    throw new HttpOperationException(System.Net.HttpStatusCode.TooManyRequests, assistantAnswer.Error.Message, assistantAnswer.Error.Message, null);
+                }
+                else
+                {
+                    _logger.LogError("Error generating response for user {UserId} in thread {ThreadId}: {Error}", userId, threadId, assistantAnswer.Error.Message);
+                    throw new ServiceException(assistantAnswer.Error.Message, ServiceType.AIService);
+                }
+            }
+            
+            var followUpQuestionList = _settings.GetSettings().AllowFollowUpPrompts
+                ? await _aiService.GenerateFollowUpQuestionsAsync(history, assistantAnswer.Content, assistantAnswer.Content)
+                : Array.Empty<string>();
+            
+            var answer = new ThreadMessage
+            {
+                Id = Guid.NewGuid().ToString(),
+                Type = "CHAT_MESSAGE",
+                ThreadId = threadId,
+                UserId = userId,
+                Role = "assistant",
+                Content = assistantAnswer.Content,
+                Context = new ResponseContext(
+                    FollowupQuestions: followUpQuestionList,
+                    DataPointsContent: null,
+                    Thoughts: null!,
+                    UsageMetrics: assistantAnswer.Usage),
+                Created = DateTime.UtcNow
+            };
+            await _threadRepository.PostMessageAsync(userId, answer, cancellationToken);
+            return answer;
+        }
+        
+        private async Task<ThreadMessage> HandleUserMessageAsync(string userId, string threadId, string message, CancellationToken cancellationToken)
+        {
+            var question = await CreateAndSaveUserMessage(userId, threadId, message, cancellationToken);
+            var history = await BuildConversationHistoryAsync(userId, threadId, message, cancellationToken);
+            string query = (_settings.GetSettings().AllowInitialPromptRewrite)
+                ? await RewriteQuestionAsync(history, cancellationToken)
+                : message;
+
+            var documents = await _documentRegistry.GetDocsPerThreadAsync(threadId);
+            var searchResults = await PerformSearchAsync(history, query, threadId, cancellationToken);
+            var answer = await GenerateAndSaveAssistantResponseAsync(userId, threadId, history, searchResults, cancellationToken);
+            return answer;
+        }
+        
+        #endregion
     }
 }

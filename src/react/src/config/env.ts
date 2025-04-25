@@ -3,6 +3,8 @@
  * This ensures that all required environment variables are present and correctly typed
  */
 
+import LoggingService from "../services/LoggingService";
+
 // Define the expected shape of our environment variables
 interface EnvVariables {
   BACKEND_URL: string;
@@ -48,7 +50,7 @@ function validateEnv(): boolean {
 // Run validation and log result
 const isEnvValid = validateEnv();
 if (!isEnvValid) {
-  console.warn('Application may not function correctly due to missing environment variables');
+  LoggingService.warn('Application may not function correctly due to missing environment variables');
 } else {
-  console.log('Environment variables validated successfully');
+  LoggingService.log('Environment variables validated successfully');
 }

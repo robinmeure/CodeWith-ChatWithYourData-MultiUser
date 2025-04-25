@@ -1,11 +1,12 @@
 import { Button, Table, TableBody, TableCell, TableCellLayout, TableHeader, TableHeaderCell, TableRow, makeStyles, tokens, Dialog, DialogSurface, DialogBody, DialogContent, Spinner } from '@fluentui/react-components';
-import { Delete12Regular, DocumentText24Regular } from '@fluentui/react-icons/fonts';
+import { Delete12Regular, DocumentText24Regular, ArrowDownload24Regular, DocumentRegular } from '@fluentui/react-icons/fonts';
 import { IDocument } from '../../models/Document';
 import { useState } from 'react';
 import { ChunkViewer } from '../admin/ChunkViewer';
 import { DocumentService } from '../../services/DocumentService';
 import { useAuth } from '../../hooks/useAuth';
 import { IIndexDoc } from '../../models/IndexDoc';
+import ReactMarkdown from 'react-markdown';
 
 const useClasses = makeStyles({
     container: {
@@ -42,6 +43,9 @@ const useClasses = makeStyles({
         justifyContent: 'center',
         alignItems: 'center',
         height: '100%'
+    },
+    markdownContent: {
+        padding: tokens.spacingHorizontalM
     }
 });
 
@@ -51,41 +55,61 @@ const columns = [
     { columnKey: "fileSize", label: "Size" },
     { columnKey: "uploadDate", label: "Upload Date" },
     { columnKey: "status", label: "Status" },
+    { columnKey: "extractStatus", label: "Extract Status" },
     { columnKey: "actions", label: "" }
 ];
 
 type documentGridProps = { 
       documents?: IDocument[];
-      deleteDocument:  ({chatId, documentId}:{ chatId: string; documentId: string; }) => Promise<boolean>
+      deleteDocument: ({chatId, documentId}:{ chatId: string; documentId: string; }) => Promise<boolean>;
+      getDocumentChunks: (threadId: string, documentId: string) => Promise<IIndexDoc[]>;
+      getDocumentExtract: (threadId: string, documentId: string) => Promise<string>;
+      extractDocument: (threadId: string, documentId: string) => Promise<boolean>;
 }
 
-export function DocumentGrid({ documents, deleteDocument } : documentGridProps) {
+export function DocumentGrid({ documents, deleteDocument, getDocumentChunks, getDocumentExtract, extractDocument } : documentGridProps) {
     const classes = useClasses();
     const [showChunks, setShowChunks] = useState(false);
+    const [showExtract, setShowExtract] = useState(false);
     const [selectedDocument, setSelectedDocument] = useState<IDocument | null>(null);
     const [documentChunks, setDocumentChunks] = useState<IIndexDoc[]>([]);
-    const [loading, setLoading] = useState(false);
-    const { accessToken } = useAuth();
-    const documentService = new DocumentService();
-
-    const handleDelete = async (chatId: string, documentId: string) => {
+    const [extractContent, setExtractContent] = useState<string>('');
+    const [loading, setLoading] = useState(false);    const handleDelete = async (chatId: string, documentId: string) => {
         await deleteDocument({chatId: chatId, documentId: documentId});
     }
 
-    const handleViewChunks = async (document: IDocument) => {
+    const handleExtract = async (document: IDocument) => {
+        try {
+            await extractDocument(document.threadId, document.id);
+            // No need to refresh, as the document list will be refreshed via the query invalidation
+        } catch (error) {
+            console.error('Failed to extract document:', error);
+        }
+    };const handleViewChunks = async (document: IDocument) => {
         setSelectedDocument(document);
         setLoading(true);
         setShowChunks(true);
         
         try {
-            const chunks = await documentService.getDocumentChunksAsync({
-                threadId: document.threadId,
-                documentId: document.id,
-                token: accessToken
-            });
+            const chunks = await getDocumentChunks(document.threadId, document.id);
             setDocumentChunks(chunks);
         } catch (error) {
             console.error('Failed to fetch document chunks:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleViewExtract = async (document: IDocument) => {
+        setSelectedDocument(document);
+        setLoading(true);
+        setShowExtract(true);
+        
+        try {
+            const extractText = await getDocumentExtract(document.threadId, document.id);
+            setExtractContent(extractText);
+        } catch (error) {
+            console.error('Failed to fetch document extract:', error);
         } finally {
             setLoading(false);
         }
@@ -117,7 +141,7 @@ export function DocumentGrid({ documents, deleteDocument } : documentGridProps) 
                                 <TableHeaderCell key={column.columnKey} className={classes.headerText}>
                                     {column.label}
                                 </TableHeaderCell>
-                            ))}
+                            ))} 
                             <TableHeaderCell />
                         </TableRow>
                     </TableHeader>
@@ -133,13 +157,16 @@ export function DocumentGrid({ documents, deleteDocument } : documentGridProps) 
                                 </TableCell>
                                 <TableCell tabIndex={0} role="gridcell">
                                     {formatDate(item.uploadDate)}
-                                </TableCell>
-                                <TableCell tabIndex={0} role="gridcell">
+                                </TableCell>                                <TableCell tabIndex={0} role="gridcell">
                                     <span className={item.availableInSearchIndex ? classes.statusAvailable : classes.statusPending}>
                                         {item.availableInSearchIndex ? "Available" : "Pending"}
                                     </span>
                                 </TableCell>
-                                <TableCell role="gridcell">
+                                <TableCell tabIndex={0} role="gridcell">
+                                    <span className={item.extractAvailable ? classes.statusAvailable : classes.statusPending}>
+                                        {item.extractAvailable ? "Available" : "Pending"}
+                                    </span>
+                                </TableCell>                                <TableCell role="gridcell">
                                     <TableCellLayout className={classes.deleteColumn}>
                                         <Button 
                                             icon={<DocumentText24Regular />} 
@@ -147,11 +174,27 @@ export function DocumentGrid({ documents, deleteDocument } : documentGridProps) 
                                             //disabled={!item.availableInSearchIndex} 
                                             title={item.availableInSearchIndex ? "View document chunks" : "Document not yet processed"}
                                         />
-                                        <Button icon={<Delete12Regular />} onClick={() => handleDelete(item.threadId, item.id)}/>
+                                        <Button 
+                                            icon={<DocumentRegular />} 
+                                            onClick={() => handleViewExtract(item)}
+                                            disabled={!item.extractAvailable}
+                                            title={item.extractAvailable ? "View document extract" : "Extract not available"}
+                                        />
+                                        <Button 
+                                            icon={<ArrowDownload24Regular />} 
+                                            onClick={() => handleExtract(item)} 
+                                            disabled={item.extractAvailable}
+                                            title={item.extractAvailable ? "Extract already available" : "Extract document content"}
+                                        />
+                                        <Button 
+                                            icon={<Delete12Regular />} 
+                                            onClick={() => handleDelete(item.threadId, item.id)}
+                                            title="Delete document"
+                                        />
                                     </TableCellLayout>
                                 </TableCell>
                             </TableRow>
-                        ))}
+                        ))} 
                     </TableBody>
                 </Table>
             </div>
@@ -166,6 +209,24 @@ export function DocumentGrid({ documents, deleteDocument } : documentGridProps) 
                                 </div>
                             ) : (
                                 <ChunkViewer chunks={documentChunks} />
+                            )}
+                        </DialogContent>
+                    </DialogBody>
+                </DialogSurface>
+            </Dialog>
+
+            <Dialog open={showExtract} onOpenChange={(_, { open }) => setShowExtract(open)}>
+                <DialogSurface className={classes.dialogSurface}>
+                    <DialogBody>
+                        <DialogContent className={classes.dialogContent}>
+                            {loading ? (
+                                <div className={classes.loadingContainer}>
+                                    <Spinner label="Loading document extract..." />
+                                </div>
+                            ) : (
+                                <div className={classes.markdownContent}>
+                                    <ReactMarkdown>{extractContent}</ReactMarkdown>
+                                </div>
                             )}
                         </DialogContent>
                     </DialogBody>

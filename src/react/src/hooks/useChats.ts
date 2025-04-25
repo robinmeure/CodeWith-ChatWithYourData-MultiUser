@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { ChatService } from "../services/ChatService";
 import { useAuth } from "./useAuth";
+import LoggingService from "../services/LoggingService";
 
 export const useChats = () => {
 
@@ -15,31 +16,27 @@ export const useChats = () => {
         queryKey: ['chats'],
         queryFn: async () => chatService.getChatsAsync(accessToken),
         enabled: userId != undefined && accessToken != undefined && accessToken != "",
-    });
-
-    const { mutateAsync: addChat} = useMutation({
+    });    const { mutateAsync: addChat} = useMutation({
         mutationFn: () => chatService.createChatAsync({token: accessToken}),
         onError: () => {
-            console.log('Failed to create a chat.');
+            LoggingService.warn('Failed to create a chat.');
         },
         onSuccess: (data) => {
             // Make sure to invalidate queries first
             queryClient.invalidateQueries({ queryKey: ['chats'] });
             
             // Explicitly log and set the chat ID
-            console.log("Chat created successfully, ID:", data.id);
+            LoggingService.log("Chat created successfully, ID:", data.id);
             
             // Use setTimeout to ensure this happens after React updates
             setTimeout(() => {
                 selectChat(data.id);
             }, 0);
         }
-    });
-
-    const { mutateAsync: deleteChat} = useMutation({
+    });    const { mutateAsync: deleteChat} = useMutation({
         mutationFn: ({chatId} : { chatId: string}) => chatService.deleteChatAsync({chatId, token: accessToken}),
         onError: () => {
-            console.log('Failed to delete chat.');
+            LoggingService.warn('Failed to delete chat.');
         },
         onSuccess: (data) => {
             if(data){
@@ -47,13 +44,11 @@ export const useChats = () => {
                 selectChat();
             }
         }
-    });
-
-    const { mutateAsync: updateChatName } = useMutation({
+    });    const { mutateAsync: updateChatName } = useMutation({
         mutationFn: ({chatId, name}: { chatId: string, name: string }) => 
             chatService.updateChatNameAsync({chatId, name, token: accessToken}),
         onError: () => {
-            console.log('Failed to update chat name.');
+            LoggingService.warn('Failed to update chat name.');
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['chats'] });

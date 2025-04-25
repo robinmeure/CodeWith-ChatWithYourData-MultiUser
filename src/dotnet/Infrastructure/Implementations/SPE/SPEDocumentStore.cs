@@ -66,10 +66,10 @@ namespace Infrastructure.Implementations.SPE
 
            
             if (!string.IsNullOrEmpty(driveId))
-                return await _graphService.GetDrive(graphAccessToken, driveId);
+                return await _graphService.GetDriveAsync(graphAccessToken, driveId);
           
             var container = await _graphService.AddContainerAsync(graphAccessToken, containerName:threadId, containerTypeId, threadId:threadId);
-            return await _graphService.GetDrive(graphAccessToken, container.Id);
+            return await _graphService.GetDriveAsync(graphAccessToken, container.Id);
           
         }
 
@@ -111,7 +111,7 @@ namespace Infrastructure.Implementations.SPE
         {
             var results = new List<string>();
             var graphAccessToken = await _tokenAcquisition.GetAccessTokenForUserAsync(new string[] { GraphScope.Default }, tenantId: tenantId);
-            var documents = await _graphService.GetDriveRootItems(graphAccessToken, folder);
+            var documents = await _graphService.GetDriveRootItemsAsync(graphAccessToken, folder);
             foreach (var document in documents)
             {
                 results.Add(document.Name);

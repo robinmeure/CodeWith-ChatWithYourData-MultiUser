@@ -14,8 +14,10 @@ import { DocumentChunksTab } from "../components/admin/DocumentChunksTab";
 import { SettingsTab } from "../components/admin/SettingsTab";
 import { PredefinedPromptsTab } from "../components/admin/PredefinedPromptsTab";
 import { HealthTab } from "../components/admin/HealthTab";
+import { LoggingSettingsTab } from "../components/admin/LoggingSettingsTab";
 import { PredefinedPrompt } from "../models/Settings";
 import { useLayoutStyles } from "../styles/sharedStyles";
+import LoggingService from "../services/LoggingService";
 
 const useStyles = makeStyles({
     container: {
@@ -86,10 +88,9 @@ export const AdminPage = () => {
                 seed: newSettings.seed,
                 allowFollowUpPrompts: newSettings.allowFollowUpPrompts,
                 allowInitialPromptRewrite: newSettings.allowInitialPromptRewrite,
-                allowInitialPromptToHelpUser: newSettings.allowInitialPromptToHelpUser,
-                useSemanticRanker: newSettings.useSemanticRanker
+                allowInitialPromptToHelpUser: newSettings.allowInitialPromptToHelpUser,                useSemanticRanker: newSettings.useSemanticRanker
             };
-            console.log("Updating settings:", updatedSettings);
+            LoggingService.log("Updating settings:", updatedSettings);
             updateSettings(updatedSettings);
         }
     };
@@ -97,12 +98,11 @@ export const AdminPage = () => {
     const handlePredefinePromptsUpdate = (prompts: PredefinedPrompt[]) => {
         // Only update predefinedPrompts, preserve all other settings
         if (settings) {
-            const updatedSettings = {
-                ...settings,
+            const updatedSettings = {                ...settings,
                 predefinedPrompts: prompts
             };
-            console.log("Updating predefined prompts:", updatedSettings);
-            updateSettings(updatedSettings);        }
+            LoggingService.log("Updating predefined prompts:", updatedSettings);
+            updateSettings(updatedSettings);}
     };
     
     const handleTabSelect = (_event: React.SyntheticEvent, data: { value: unknown }) => {
@@ -125,13 +125,13 @@ export const AdminPage = () => {
         <div className={`${styles.container} ${layoutStyles.scrollContainer}`}>
             <div className={styles.header}>
                 <h1>Admin Dashboard</h1>
-                
-                <TabList selectedValue={selectedTab} onTabSelect={handleTabSelect}>
+                  <TabList selectedValue={selectedTab} onTabSelect={handleTabSelect}>
                     <Tab value="settings">Settings</Tab>
                     <Tab value="documents">Documents</Tab>
                     <Tab value="chunks">Document Chunks</Tab>
                     <Tab value="prompts">Predefined Prompts</Tab>
                     <Tab value="health">System Health</Tab>
+                    <Tab value="logging">Logging</Tab>
                 </TabList>
             </div>
 
@@ -168,14 +168,17 @@ export const AdminPage = () => {
                         onSavePrompts={handlePredefinePromptsUpdate}
                     />
                 )}
-                
-                {selectedTab === "health" && (
+                  {selectedTab === "health" && (
                     <HealthTab
                         healthData={healthData}
                         isLoading={isLoadingHealth}
                         error={healthError}
                         onRefresh={refreshHealthCheck}
                     />
+                )}
+
+                {selectedTab === "logging" && (
+                    <LoggingSettingsTab />
                 )}
             </div>
         </div>

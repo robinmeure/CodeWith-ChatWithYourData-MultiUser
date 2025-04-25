@@ -25,6 +25,7 @@ namespace Infrastructure.Helpers
     {
         public ServiceType ServiceType { get; }
 
+
         public ServiceException(string message, Exception innerException, ServiceType serviceType) 
             : base(message, innerException)
         {

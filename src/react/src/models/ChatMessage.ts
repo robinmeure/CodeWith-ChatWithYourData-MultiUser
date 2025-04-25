@@ -3,7 +3,8 @@ export interface IChatMessage {
     role: string,
     content: string,
     created?: string,
-    context?:IChatContext    
+    context?:IChatContext,
+    agentName?: string // Added for compliancy review responses
 }
 
 export interface IChatContext
@@ -11,7 +12,16 @@ export interface IChatContext
     followup_questions?: string[],
     citations?: Citation[],
     dataPointsContent?: DataPointsContent[],
-    thoughts?: Thoughts[]
+    thoughts?: Thoughts[],
+    usageMetrics?: Usage,
+    isFinal?: boolean
+}
+
+export type Usage = 
+{
+    inputTokens: number,
+    outputTokens: number,
+    totalTokens: number
 }
 
 export type DataPointsContent = 

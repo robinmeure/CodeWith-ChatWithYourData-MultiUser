@@ -20,6 +20,10 @@ namespace Domain.Search
 
         public required string Content { get; init; }
 
+        [JsonPropertyName("extract")]
+
+        public string? Extract { get; set; }
+
         [JsonPropertyName("file_name")]
 
         public required string FileName { get; init; }

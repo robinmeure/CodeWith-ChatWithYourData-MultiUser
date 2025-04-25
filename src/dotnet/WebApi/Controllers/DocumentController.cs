@@ -32,6 +32,7 @@ namespace WebApi.Controllers
         private readonly ILogger<DocumentController> _logger;
         private readonly IConfiguration _configuration;
         private readonly IDocumentProcessorQueue _documentProcessorQueue;
+        private readonly IAIService _aIService; 
 
         private readonly string _containerName;
         private readonly HashSet<string> _blockedFileExtensions;
@@ -42,7 +43,8 @@ namespace WebApi.Controllers
             IDocumentRegistry cosmosDocumentRegistry,
             ISearchService aISearchService,
             IConfiguration configuration,
-            IDocumentProcessorQueue documentProcessorQueue
+            IDocumentProcessorQueue documentProcessorQueue,
+            IAIService aIService
             )
         {
             _documentStore = blobDocumentStore;
@@ -51,7 +53,7 @@ namespace WebApi.Controllers
             _configuration = configuration;
             _logger = logger;
             _documentProcessorQueue = documentProcessorQueue;
-
+            _aIService = aIService;
             // Read the container name from configuration
             _containerName = _configuration.GetValue<string>("Storage:ContainerName") ?? "documents";
 
@@ -89,6 +91,36 @@ namespace WebApi.Controllers
             }
         }
 
+        [HttpGet("{documentId}/extract")]
+        public async Task<IActionResult> GetExtract([FromRoute] string threadId, [FromRoute] string documentId)
+        {
+            try
+            {
+                // Use GetUserId extension method for consistency
+                string? userId = HttpContext.GetUserId();
+
+                if (userId == null)
+                {
+                    _logger.LogWarning("GetChunks called with null userId");
+                    return Unauthorized(new { error = "UserId is required" });
+                }
+
+                _logger.LogInformation("Fetching chunks for documentId: {DocumentId}", documentId);
+                var document = await _searchService.GetExtractedResultsAsync(threadId, documentId);
+              
+                var extract = document?.Extract;
+                _logger.LogInformation("Successfully fetched chunks for documentId: {DocumentId}", documentId);
+
+                return Ok(extract);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unexpected error in GetChunks for documentId: {DocumentId}", documentId);
+                return StatusCode(StatusCodes.Status500InternalServerError,
+                    new { error = "An unexpected error occurred while fetching chunks", requestId = HttpContext.TraceIdentifier });
+            }
+        }
+
 
         [HttpGet()]
         // Change return type
@@ -117,6 +149,66 @@ namespace WebApi.Controllers
                 _logger.LogError(ex, "Unexpected error in Get documents for threadId: {ThreadId}", threadId);
                 return StatusCode(StatusCodes.Status500InternalServerError,
                     new { error = "An unexpected error occurred while fetching documents", requestId = HttpContext.TraceIdentifier });
+            }
+        }
+
+        [HttpPost("{documentId}", Name = "ExtractDocument")]
+        public async Task<IActionResult> ExtractDocument([FromRoute] string threadId, string documentId)
+        {
+            // Use GetUserId extension method for consistency
+            string? userId = HttpContext.GetUserId();
+
+            if (userId == null)
+            {
+                _logger.LogWarning("UploadDocuments called with null userId");
+                return Unauthorized(new { error = "UserId is required" });
+            }
+
+            if (documentId == null)
+            {
+                _logger.LogWarning("No documentId provided.");
+                return BadRequest("No documentId provided.");
+            }
+
+            try
+            {
+                _logger.LogInformation("Extracting document with ID: {DocumentId}", documentId);
+                var documents = await _searchService.GetDocumentAsync(documentId);
+                if (documents == null || !documents.Any())
+                {
+                    _logger.LogWarning("No documents found for ID: {DocumentId}", documentId);
+                    return NotFound(new { error = "No documents found." });
+                }
+
+                // need to do this via the document processor queue later.. 
+                var extracted = await _aIService.ExtractDocument(documents);
+
+                if (string.IsNullOrEmpty(extracted))
+                {
+                    _logger.LogWarning("No extracted content found for documentId: {DocumentId}", documentId);
+                    return NotFound(new { error = "No extracted content found." });
+                }
+
+                // ingest the extracted content into the search index
+                bool ingested = await _searchService.IngestExtractedDocumentIntoIndex(extracted, documentId);
+                if (ingested)
+                {
+                    _logger.LogInformation("Successfully ingested extracted content for documentId: {DocumentId}", documentId);
+                }
+                else
+                {
+                    _logger.LogWarning("Failed to ingest extracted content for documentId: {DocumentId}", documentId);
+                    return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Failed to ingest extracted content." });
+                }
+
+                // Return the extracted documents
+                return Ok();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unexpected error in ExtractDocument for documentId: {DocumentId}", documentId);
+                return StatusCode(StatusCodes.Status500InternalServerError,
+                    new { error = "An unexpected error occurred while extracting the document", requestId = HttpContext.TraceIdentifier });
             }
         }
 

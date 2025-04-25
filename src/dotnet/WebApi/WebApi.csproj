@@ -16,6 +16,7 @@
     <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.48.0" />
     <PackageReference Include="Microsoft.Extensions.Azure" Version="1.11.0" />
     <PackageReference Include="Microsoft.Identity.Web" Version="3.8.3" />
+    <PackageReference Include="Microsoft.Identity.Web.GraphServiceClient" Version="3.8.3" />
     <PackageReference Include="Microsoft.KernelMemory.Core" Version="0.98.250324.1" />
     <PackageReference Include="Microsoft.SemanticKernel" Version="1.45.0" />
 	<PackageReference Include="Microsoft.SemanticKernel.Connectors.OpenAI" Version="1.45.0" />
@@ -27,6 +28,12 @@
   <ItemGroup>
     <ProjectReference Include="..\Infrastructure\Infrastructure.csproj" />
     <ProjectReference Include="..\ServiceDefaults\ServiceDefaults.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="docs\guidelines.csv">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 

@@ -3,6 +3,7 @@ import { IDocument } from "../models/Document";
 import { IIndexDoc } from "../models/IndexDoc";
 import { env } from "../config/env";
 import { ISetting } from "../models/Settings";
+import LoggingService from "./LoggingService";
 
 // Add new HealthCheck interface
 export interface HealthCheck {
@@ -71,10 +72,9 @@ export class AdminService {
             });
             if (!response.ok) {
                 throw new Error(`Error fetching settings: ${response.statusText}`);
-            }
-            const settings: ISetting = await response.json();
+            }            const settings: ISetting = await response.json();
             // Log settings for debugging
-            console.log("Fetched settings:", settings);
+            LoggingService.log("Fetched settings:", settings);
             return settings;
         } catch (error) {
             console.error('Failed to fetch settings:', error);
@@ -116,9 +116,8 @@ export class AdminService {
             });
             if (!response.ok) {
                 throw new Error(`Error fetching health check: ${response.statusText}`);
-            }
-            const healthData: HealthCheck = await response.json();
-            console.log("Health check data:", healthData);
+            }            const healthData: HealthCheck = await response.json();
+            LoggingService.log("Health check data:", healthData);
             return healthData;
         } catch (error) {
             console.error('Failed to fetch health check:', error);
