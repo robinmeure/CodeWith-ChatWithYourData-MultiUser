@@ -2,37 +2,27 @@ using Azure.Identity;
 using Azure.Search.Documents.Indexes;
 using Infrastructure.Helpers;
 using Microsoft.Azure.Cosmos;
-using Microsoft.Extensions.Azure;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Identity.Web;
 using Microsoft.AspNetCore.Http.Features;
 using WebApi.Extensions;
 using Domain.Chat;
 using Azure.Monitor.OpenTelemetry.AspNetCore;
-using Microsoft.SemanticKernel.Connectors.AzureOpenAI;
-using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using System.Text.Json;
-using System.Text;
-using Microsoft.Extensions.DependencyInjection;
 using Infrastructure.Interfaces;
-using Microsoft.Identity.Client;
-using Infrastructure.Implementations.KernelMemory;
 using Infrastructure.Implementations.SPE;
 using Infrastructure.Implementations.Cosmos;
 using Infrastructure.Implementations.SemanticKernel;
 using Infrastructure.Implementations.AISearch;
-using Infrastructure.Implementations.Blob;
 using WebApi.HealthChecks;
-using WebApi.Helpers;
-using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.Diagnostics;
-using Microsoft.AspNetCore.Http.Extensions;
-using Microsoft.Graph;
-using Infrastructure.Implementations.SemanticKernel.Tools;
-using DocumentFormat.OpenXml.Office2016.Drawing.ChartDrawing;
 using Microsoft.SemanticKernel;
-using System.Net.Http;
+using Azure.AI.Inference;
+using Microsoft.Extensions.AI;
+using Azure.Core.Pipeline;
+using Azure.Core;
+
+using Microsoft.SemanticKernel.ChatCompletion;
 
 namespace WebApi
 {
@@ -49,6 +39,7 @@ namespace WebApi
             var azureCredential = new DefaultAzureCredential(azureCredentialOptions);
 
             builder.AddServiceDefaults();
+            //builder.AddSemanticKernelLogging();
 
             var httpClient = new HttpClient
             {
@@ -59,9 +50,14 @@ namespace WebApi
             builder.Services.AddHttpClient("LongTimeout", httpClient =>
             {
             });
-
-            // The following line enables Azure Monitor Distro.
-            builder.Services.AddOpenTelemetry().UseAzureMonitor();
+          
+            // Auth
+            builder.Services
+                .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+                .AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("AzureAd"))
+                .EnableTokenAcquisitionToCallDownstreamApi()
+                .AddMicrosoftGraph(builder.Configuration.GetSection("DownstreamApi"))
+                .AddInMemoryTokenCaches();
 
             builder.Services.AddSingleton<IConfiguration>(builder.Configuration);
             // Setting up the Cosmosdb client
@@ -89,10 +85,10 @@ namespace WebApi
             builder.Services.AddSingleton<IDocumentRegistry, CosmosDocumentRegistry>();
 
             // ---------- SharePoint Embedded Implementation ----------------
-            builder.Services.AddScoped<IDocumentStore, SPEDocumentStore>(); // this makes use of SharePoint Embedded
-            builder.Services.AddScoped<GraphServiceClient>();
             builder.Services.AddScoped<MSGraphService>(); // this is needed to work with SharePoint Embedded
-                                                          // -----------------------------------------------------
+            builder.Services.AddScoped<IDocumentStore, SPEDocumentStore>(); // this makes use of SharePoint Embedded
+            
+            // -----------------------------------------------------
 
             // ---------- Azure Blob Implementation ----------------
             // Setting up the Azure Blob Storage client
@@ -106,22 +102,23 @@ namespace WebApi
             // -----------------------------------------------------
 
             // Setting up the Semantic Kernel and AI Search
-            builder.Services.AddSingleton(sp =>
-            {
-                string? endpoint = builder.Configuration["OpenAI:EndPoint"];
-                string? completionModel = builder.Configuration["OpenAI:CompletionModel"];
-                string? reasoningModel = builder.Configuration["OpenAI:ReasoningModel"];
-                string? embeddingModel = builder.Configuration["OpenAI:EmbeddingModel"];
-                var kernelBuilder = Kernel.CreateBuilder();
-                kernelBuilder.AddAzureOpenAIChatCompletion(completionModel, endpoint, azureCredential, serviceId: "completion", httpClient: httpClient);
-                kernelBuilder.AddAzureOpenAIChatCompletion(reasoningModel, endpoint, azureCredential, serviceId: "reasoning", httpClient: httpClient);
-                return kernelBuilder.Build();
-            });
-            builder.AddKernelMemory(azureCredential);            builder.Services.AddSingleton<ISearchService, AISearchService>();
+            string? endpoint = builder.Configuration["OpenAI:EndPoint"];
+            string? completionModel = builder.Configuration["OpenAI:CompletionModel"];
+            string? reasoningModel = builder.Configuration["OpenAI:ReasoningModel"];
+            string? embeddingModel = builder.Configuration["OpenAI:EmbeddingModel"];
+
+            // ----------  Azure OpenAI with Semantic Kernel setup ----------------
+            Kernel kernel = Kernel.CreateBuilder()
+                .AddAzureOpenAIChatCompletion(endpoint:endpoint, deploymentName:completionModel, credentials:azureCredential, serviceId: "completion")
+                .AddAzureOpenAIChatCompletion(endpoint:endpoint, deploymentName:reasoningModel, credentials:azureCredential, serviceId: "reasoning")
+                .Build();
+
+            builder.Services.AddSingleton(kernel);
+            builder.AddKernelMemory(azureCredential);            
+            builder.Services.AddSingleton<ISearchService, AISearchService>();
             builder.Services.AddSingleton<IThreadRepository, CosmosThreadRepository>();
             builder.Services.AddSingleton<IAIService, SemanticKernelService>();
 
-            builder.Services.AddHttpClient();  //Enable direct http client calls
             // Add health checks
             builder.Services.AddHealthChecks()
                 .AddCheck<CosmosHealthCheck>("cosmos_health_check", tags: new[] { "ready" })
@@ -135,13 +132,7 @@ namespace WebApi
             }
             builder.Services.AddSingleton<ThreadSafeSettings>(new ThreadSafeSettings(initialSettings));
 
-            // Auth
-            builder.Services
-                .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-                .AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("AzureAd"))
-                .EnableTokenAcquisitionToCallDownstreamApi()
-                .AddMicrosoftGraph(builder.Configuration.GetSection("AzureAd"))
-                .AddInMemoryTokenCaches();
+            
 
             // file upload limit -- need to work on this, still limited to 30MB
             builder.Services.Configure<FormOptions>(options =>

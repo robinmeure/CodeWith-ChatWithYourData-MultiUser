@@ -19,6 +19,7 @@ public interface ISearchService
     Task<bool> StartIndexing();
     Task<bool> DeleteDocumentAsync(DocsPerThread document);
     Task<List<IndexDoc>> GetSearchResultsAsync(string query, string threadId);
+    Task<List<IndexDoc>> GetSearchResultsAsync(string query, string threadId, List<string> documentIds);
     Task<List<IndexDoc>> GetExtractedResultsAsync(string threadId);
     Task<IndexDoc> GetExtractedResultsAsync(string threadId, string documentId);
     Task<long> GetSearchResultsCountAsync();

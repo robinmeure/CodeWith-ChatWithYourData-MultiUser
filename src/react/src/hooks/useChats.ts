@@ -61,14 +61,16 @@ export const useChats = () => {
         } else {
             setSelectedChatId(undefined);
         }
-    };
-
+    };    // Find the selected chat from the chats array using selectedChatId
+    const selectedChat = chats?.find(chat => chat.id === selectedChatId);
+    
     return {
         isPending,
         error,
         chats,
         selectChat,
         selectedChatId,
+        selectedChat,
         addChat,
         deleteChat,
         updateChatName

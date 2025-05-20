@@ -1,24 +1,15 @@
 import { 
-  FluentProvider,
   TabList, 
   Tab, 
   tokens,
   makeStyles,
   Switch,
   Tooltip,
-  Menu,
-  MenuList,
-  MenuItem,
-  MenuPopover,
-  MenuTrigger,
-  Button,
   Divider
 } from "@fluentui/react-components";
 import { 
   WeatherMoon20Regular, 
-  WeatherSunny20Regular, 
-  Settings24Regular,
-  AccessibilityCheckmark24Regular
+  WeatherSunny20Regular
 } from '@fluentui/react-icons';
 import { ChatPage } from './pages/ChatPage';
 import { AdminPage } from './pages/AdminPage';
@@ -27,7 +18,8 @@ import { MsalProvider, MsalAuthenticationTemplate } from "@azure/msal-react";
 import { Configuration, PublicClientApplication, InteractionType } from "@azure/msal-browser";
 import { ThemeProvider, useTheme } from "./components/ThemeContext";
 import { env } from "./config/env";
-import { BrowserRouter, Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { useState } from 'react';
 
 const queryClient = new QueryClient()
 
@@ -103,6 +95,13 @@ const useNavStyles = makeStyles({
     display: 'flex',
     alignItems: 'center',
     gap: tokens.spacingHorizontalS,
+  },
+  versionToggle: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalXS,
+    fontSize: tokens.fontSizeBase200,
+    color: tokens.colorNeutralForeground2,
   }
 });
 
@@ -126,7 +125,8 @@ function ThemeToggle() {
   );
 }
 
-// Settings menu component
+// Commented out as unused, but kept for future reference
+/*
 function SettingsMenu() {
   const { highContrastMode, setHighContrastMode } = useTheme();
   const navStyles = useNavStyles();
@@ -158,15 +158,21 @@ function SettingsMenu() {
     </Menu>
   );
 }
+*/
 
 // Main navigation component
 function AppNavigation() {
   const navStyles = useNavStyles();
   const location = useLocation();
   const navigate = useNavigate();
+  const [isV2, setIsV2] = useState(false);
 
-  const handleTabSelect = (_: any, data: { value: unknown }) => {
+  const handleTabSelect = (_: React.SyntheticEvent, data: { value: unknown }) => {
     navigate(data.value as string);
+  };
+
+  const toggleVersion = () => {
+    setIsV2((prev) => !prev);
   };
 
   return (
@@ -184,6 +190,7 @@ function AppNavigation() {
             <Tab value="/">Chat</Tab>
             <Tab value="/admin">Admin</Tab>
           </TabList>
+          
         </div>
       </div>
       <div className={navStyles.contentContainer}>
@@ -215,4 +222,4 @@ function App() {
   );
 }
 
-export default App
+export default App;

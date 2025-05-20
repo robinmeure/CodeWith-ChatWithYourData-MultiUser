@@ -1,6 +1,7 @@
 import { IChat } from "../models/Chat";
 import { IChatMessage } from "../models/ChatMessage";
 import { env } from "../config/env";
+import { IChatMessageRequest } from "../models/ChatMessageRequest";
 
 // Define API response types for better type safety
 type ApiResponse<T> = {
@@ -294,7 +295,7 @@ export class ChatService {
 
     public sendMessageAsync = async ({chatId, message, token} : { 
         chatId: string, 
-        message: string, 
+        message: IChatMessageRequest, 
         token: string 
     }): Promise<Response> => {
         try {
@@ -323,7 +324,7 @@ export class ChatService {
     }    
       public sendMessageStreamAsync = async ({chatId, message, token} : { 
         chatId: string, 
-        message: string, 
+        message: IChatMessageRequest, 
         token: string 
     }): Promise<Response> => {
         try {
@@ -334,7 +335,7 @@ export class ChatService {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ message: message }),
+                body: JSON.stringify({message: message.message, documentIds: message.documentIds, tools: message.tools}),
             });
 
             if (!response.ok) {

@@ -10,7 +10,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace DocumentCleanUp
+namespace CleanUpJobs.Jobs
 {
     public class ThreadCleanup
     {

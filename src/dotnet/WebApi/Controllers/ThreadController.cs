@@ -1,27 +1,30 @@
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.SemanticKernel.ChatCompletion;
-using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.Data;
-using System.Text;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.Identity.Web.Resource;
-using Microsoft.Azure.Cosmos;
-using System.Text.Json;
-using WebApi.Helpers;
-using System.Text.RegularExpressions;
-using System.Runtime.CompilerServices;
-using Domain.Cosmos;
+using Azure.AI.Inference;
 using Domain.Chat;
-using ResponseMessage = Domain.Chat.ResponseMessage;
-using Microsoft.Extensions.Logging;
+using Domain.Cosmos;
 using Domain.Search;
-using Thread = Domain.Cosmos.Thread;
-using System.Net;
-using System.Runtime.ExceptionServices;
 using Infrastructure.Helpers;
 using Infrastructure.Interfaces;
-using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
+using Microsoft.Identity.Web.Resource;
+using Microsoft.KernelMemory.DataFormats;
+using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.ChatCompletion;
+using Microsoft.SemanticKernel.Data;
+using OpenAI.Chat;
+using System.ComponentModel.DataAnnotations;
+using System.Net;
+using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
+using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using WebApi.Helpers;
+using ResponseMessage = Domain.Chat.ResponseMessage;
+using Thread = Domain.Cosmos.Thread;
 
 namespace WebApi.Controllers
 {
@@ -465,7 +468,7 @@ namespace WebApi.Controllers
                 }
                 
                 // Get the agent stream
-                //var stream = _aiService.GetCompliancyResponseStreamingAsync(threadId, searchResults, cancellationToken);
+                //var stream = _aiService.GetCompliancyResponseStreamingViaAgentsAsync(threadId, uniqueExtractsString, cancellationToken);
 
                 // Get the chatcompletion stream
                 var stream = _aiService.GetCompliancyResponseStreamingViaCompletionAsync(threadId, uniqueExtractsString, cancellationToken);
@@ -624,14 +627,39 @@ namespace WebApi.Controllers
                 string query = (_settings.GetSettings().AllowInitialPromptRewrite)
                     ? await RewriteQuestionAsync(history, cancellationToken)
                     : messageRequest.Message;
-                    
-                var searchResults = await PerformSearchAsync(
-                    history, query, threadId, cancellationToken);
 
-                // Get streaming chat response
-                var stream = _aiService.GetChatCompletionStreaming(history);
-                
+                string toolName = string.Empty;
+                if (messageRequest.Tools != null && messageRequest.Tools.Count > 0)
+                {
+                    toolName = messageRequest.Tools.FirstOrDefault();
+                }
+
+                IAsyncEnumerable<StreamingChatMessageContent> stream = null;
+
+                if (toolName == "incose")
+                {
+                    // Perform specific logic for "incose" tool
+                    // Example: Implement a special search or processing here
+                    var uniqueExtractsString = string.Empty;
+                    var extractedDocs = await _search.GetExtractedResultsAsync(threadId);
+                    foreach (var extractedDoc in extractedDocs)
+                    {
+                        uniqueExtractsString += string.Join(Environment.NewLine, extractedDoc.Extract);
+                    }
+                    stream = _aiService.GetCompliancyResponseStreamingViaCompletionAsync(threadId, uniqueExtractsString, cancellationToken);
+                }
+                else
+                { 
+                    // if a document is selected, we need to search for that document only
+                    var searchResults = (messageRequest.DocumentIds.Count > 0) ?
+                        await PerformSearchAsync(history, query, threadId, messageRequest.DocumentIds, cancellationToken) :
+                        await PerformSearchAsync(history, query, threadId, cancellationToken);
+
+                    stream = _aiService.GetChatCompletionStreaming(history);
+                } 
+
                 string finalContent = string.Empty;
+                UsageMetrics? usageMetrics = new();
 
                 // Process and send each chunk in the stream
                 await foreach (var chatResponse in stream.WithCancellation(cancellationToken))
@@ -640,7 +668,16 @@ namespace WebApi.Controllers
                         new { role = chatResponse.Role.ToString(), content = chatResponse.Content, final = false });
                     await Response.WriteAsync($"data: {payload}\n\n", cancellationToken);
                     await Response.Body.FlushAsync(cancellationToken);
-                    
+
+                    // get usage
+                    if (chatResponse.InnerContent is StreamingChatCompletionUpdate chatCompletion)
+                    {
+                        if (chatCompletion.Usage != null)
+                        {
+                            usageMetrics.InputTokens = chatCompletion.Usage.InputTokenCount;
+                            usageMetrics.OutputTokens = chatCompletion.Usage.OutputTokenCount;
+                        }
+                    }
                     finalContent += chatResponse.Content;
                 }                
                 
@@ -660,6 +697,7 @@ namespace WebApi.Controllers
                             role = "assistant", 
                             content = finalContent, 
                             followupQuestions = followUpQuestionList,
+                            usageMetrics = usageMetrics,
                             final = true 
                         });
                     await Response.WriteAsync($"data: {finalPayload}\n\n", cancellationToken);
@@ -685,7 +723,7 @@ namespace WebApi.Controllers
                                         DataPointsContent: null,
                                         FollowupQuestions: followUpQuestionList,
                                         Thoughts: Array.Empty<Thoughts>(),
-                                        UsageMetrics: null)
+                                        UsageMetrics: usageMetrics)
                                 },
                                 CancellationToken.None);
                             _logger.LogInformation("Successfully saved final chat response for threadId: {ThreadId}", threadId);
@@ -777,9 +815,21 @@ namespace WebApi.Controllers
             return searchResults;
         }
 
+        private async Task<List<IndexDoc>> PerformSearchAsync(ChatHistory history, string query, string threadId, List<string> documentIds, CancellationToken cancellationToken)
+        {
+            string sanitarizedQuery = System.Text.RegularExpressions.Regex.Replace(query, @"[^\w\s]", string.Empty)
+                .Replace("\r", " ")
+                .Replace("\n", " ")
+                .Replace("\t", " ");
+            sanitarizedQuery = System.Text.RegularExpressions.Regex.Replace(sanitarizedQuery, @"\s+", " ").Trim();
+            var searchResults = await _search.GetSearchResultsAsync(sanitarizedQuery, threadId, documentIds);
+            _aiService.AugmentHistoryWithSearchResults(history, searchResults);
+            return searchResults;
+        }
+
         private async Task<ThreadMessage> GenerateAndSaveAssistantResponseAsync(string userId, string threadId, ChatHistory history, List<IndexDoc> searchResults, CancellationToken cancellationToken)
         {
-            var assistantAnswer = await _aiService.GetChatCompletion(history);
+            var assistantAnswer = await _aiService.GetChatCompletion(history, Enums.CompletionType.Chat);
             if (!assistantAnswer.IsSuccess)
             {
                 if (assistantAnswer.Error.IsRateLimit)

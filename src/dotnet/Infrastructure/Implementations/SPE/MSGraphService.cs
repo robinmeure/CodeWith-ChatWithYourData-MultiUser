@@ -13,11 +13,19 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Net.Http;
 using Microsoft.Graph.Models;
-using Microsoft.Graph;
 using Microsoft.Graph.Drives.Item.Items.Item.Invite;
 using Permission = Microsoft.Graph.Models.Permission;
 using Microsoft.Graph.Drives.Item.Items.Item.CreateUploadSession;
 using System.Text.Json;
+using Microsoft.Kiota.Abstractions;
+using Microsoft.Graph.Search.Query;
+using Microsoft.Graph;
+using GraphServiceClient = Microsoft.Graph.GraphServiceClient;
+using Microsoft.Kiota.Abstractions.Serialization;
+using Infrastructure.Implementations.SPE.Models;
+using SharePointOneDriveOptions = Infrastructure.Implementations.SPE.Models.SharePointOneDriveOptions;
+using SearchQuery = Infrastructure.Implementations.SPE.Models.SearchQuery;
+using Microsoft.Azure.Cosmos.Serialization.HybridRow;
 
 namespace Infrastructure.Implementations.SPE
 {
@@ -32,8 +40,6 @@ namespace Infrastructure.Implementations.SPE
 
         const string graphResource = "https://graph.microsoft.com";
 
-        private HttpClient client = new HttpClient();
-
         public MSGraphService(IConfiguration configuration,
             IHttpClientFactory httpClientFactory,
             ILogger<MSGraphService> logger,
@@ -43,376 +49,244 @@ namespace Infrastructure.Implementations.SPE
             _httpClientFactory = httpClientFactory;
             _logger = logger;
             _graphServiceClient = graphServiceClient;
-            client.BaseAddress = new Uri("https://graph.microsoft.com");
+           
         }
 
-        public async Task<Container> AddContainerAsync(string accessToken, string containerName, string containerTypeId, string threadId)
-        {
-            // Create a dictionary for custom properties if needed
-            var customProperties = new Dictionary<string, object>();
-
-            // Add threadId as a custom property if provided
-            if (!string.IsNullOrEmpty(threadId))
-            {
-                customProperties["threadId"] = new
-                {
-                    value = threadId,
-                    isSearchable = true
-                };
-            }
-
-            Container container = new Container()
-            {
-                DisplayName = containerName,
-                ContainerTypeId = containerTypeId,
-                Status = "active",
-                CreatedDateTime = DateTime.UtcNow,
-                Size = 0,
-                Description = threadId,
-            };
-
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("bearer", accessToken);
-            var response = await client.PostAsJsonAsync($"{GraphContainersEndpoint}", container);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                throw new Exception($"We couldn't create the container, status code {(int)response.StatusCode}, reason: {response.ReasonPhrase}''");
-            }
-
-            container = response.Content.ReadFromJsonAsync<Container>().Result;
-
-            await AddCustomPropertyToContainer(accessToken, container.Id, "threadId", threadId);
-
-            return container;
-        }
-
-        internal async Task<FileStorageContainer> AddContainerAsync(string accessToken, FileStorageContainer container)
-        {
-            var response = await client.PostAsJsonAsync($"{GraphContainersEndpoint}", container);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                throw new Exception($"We couldn't create the container, status code {(int)response.StatusCode}, reason: {response.ReasonPhrase}''");
-            }
-
-            return response.Content.ReadFromJsonAsync<FileStorageContainer>().Result;
-        }
-
-        public async Task ActivateContainer(string accessToken, string containerId)
-        {
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("bearer", accessToken);
-            var response = await client.PostAsync($"{GraphContainersEndpoint}/{containerId}/activate", null);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                throw new Exception($"We couldn't activate the container, status code {(int)response.StatusCode}, reason: {response.ReasonPhrase}''");
-            }
-        }
-
-        public async Task<FileStorageContainer> GetContainer(string accessToken, string containerId)
-        {
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("bearer", accessToken);
-            var response = await client.GetAsync($"{GraphContainersEndpoint}/{containerId}");
-
-            if (!response.IsSuccessStatusCode)
-            {
-                throw new Exception($"We couldn't get the container, status code {(int)response.StatusCode}, reason: {response.ReasonPhrase}''");
-            }
-
-            return response.Content.ReadFromJsonAsync<FileStorageContainer>().Result;
-        }
-
-        public async Task<FileStorageContainer> UpdateContainer(string accessToken, string containerId, FileStorageContainer container)
-        {
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("bearer", accessToken);
-            string serialized = JsonConvert.SerializeObject(container, new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore });
-            HttpContent content = new StringContent(serialized, Encoding.UTF8, "application/json");
-            var response = await client.PatchAsync($"{GraphContainersEndpoint}/{containerId}", content);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                throw new Exception($"We couldn't update the container, status code {(int)response.StatusCode}, reason: {response.ReasonPhrase}''");
-            }
-
-            return response.Content.ReadFromJsonAsync<FileStorageContainer>().Result;
-        }
-
-        public async Task DeleteContainer(string accessToken, string containerId)
-        {
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("bearer", accessToken);
-            var response = await client.DeleteAsync($"{GraphContainersEndpoint}/{containerId}");
-
-            if (!response.IsSuccessStatusCode)
-            {
-                throw new Exception($"We couldn't delete the container. Status code {(int)response.StatusCode}, reason: {response.ReasonPhrase}''");
-            }
-        }
-
-        public async Task<IEnumerable<FileStorageContainer>> GetAllContainers(string accessToken, string containerTypeId)
-        {
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("bearer", accessToken);
-            var response = await client.GetAsync($"{GraphContainersEndpoint}?$filter=containerTypeId eq {containerTypeId}");
-
-            _logger.LogInformation("Request url {1}", response.RequestMessage.RequestUri.ToString());
-            _logger.LogInformation("containerTypeId {1}", containerTypeId);
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogError($"We couldn't get the list of containers. Status code {(int)response.StatusCode}, reason: {response.ReasonPhrase}''");
-            }
-            string content = await response.Content.ReadAsStringAsync();
-            JObject deserialized = JsonConvert.DeserializeObject<JObject>(content);
-            JArray array = deserialized.Value<JArray>("value");
-            return array.ToObject<List<FileStorageContainer>>();
-        }
-
-        public async Task<bool> AddCustomPropertyToContainer(string accessToken, string containerId, string propertyName, object propertyValue)
+        public async Task<FileStorageContainer> CreateContainerAsync(string containerName, string containerTypeId, string threadId, CancellationToken cancellationToken = default)
         {
             try
             {
-                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("bearer", accessToken);
+                _logger.LogInformation("Creating container with Graph SDK: Name={ContainerName}, TypeId={ContainerTypeId}",
+                    containerName, containerTypeId);
 
-                // Create the custom property dictionary with the specified property
-                var customProperty = new
+                // Create base container object
+                var container = new FileStorageContainer
                 {
-                    value = propertyValue,
-                    isSearchable = true
+                    DisplayName = containerName,
+                    ContainerTypeId = Guid.Parse(containerTypeId),
+                    Status = FileStorageContainerStatus.Active, // Initially created as inactive
+                    Description = !string.IsNullOrEmpty(threadId) ? $"Container associated with thread: {threadId}" : null
                 };
 
-                var requestBody = new Dictionary<string, object>
-        {
-            { propertyName, customProperty }
-        };
+                // Create a dictionary for custom properties if needed
+                var customProperties = new Dictionary<string, object>();
 
-                string serialized = JsonConvert.SerializeObject(requestBody);
-                HttpContent content = new StringContent(serialized, Encoding.UTF8, "application/json");
-
-                // Use the specific endpoint for custom properties
-                var response = await client.PatchAsync($"{GraphContainersEndpoint}/{containerId}/customProperties", content);
-
-                if (!response.IsSuccessStatusCode)
+                // Add threadId as a custom property if provided
+                if (!string.IsNullOrEmpty(threadId))
                 {
-                    _logger.LogError("Failed to add custom property to container. Status code: {StatusCode}, Reason: {Reason}",
-                        (int)response.StatusCode, response.ReasonPhrase);
-                    return false;
+                    customProperties["threadId"] = new
+                    {
+                        value = threadId,
+                        isSearchable = true
+                    };
                 }
+
+                // Call the Graph API to create the container
+                var createdContainer = await _graphServiceClient.Storage.FileStorage.Containers
+                    .PostAsync(container, cancellationToken:cancellationToken);
+
+                if (createdContainer == null)
+                {
+                    throw new InvalidOperationException("Failed to create container: null response received");
+                }
+
+                _logger.LogInformation("Successfully created container: ID={ContainerId}, Name={ContainerName}",
+                    createdContainer.Id, createdContainer.DisplayName);
+
+                // Activate the container (if desired)
+                if (createdContainer.Status != FileStorageContainerStatus.Active)
+                {
+                    await _graphServiceClient.Storage.FileStorage.Containers[createdContainer.Id]
+                        .Activate
+                        .PostAsync(cancellationToken: cancellationToken);
+
+                    _logger.LogInformation("Container activated: ID={ContainerId}", createdContainer.Id);
+                }
+
+                // todo, get this working with the graphserviceclient
+                // await AddCustomPropertyToContainer(container.Id, "threadId", threadId);
+                await UpdateContainerCustomPropertyAsync(createdContainer.Id, "threadId", threadId, cancellationToken);
+
+                return createdContainer;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating container: {Message}", ex.Message);
+                throw;
+            }
+        }
+
+        public async Task<bool> UpdateContainerCustomPropertyAsync(string containerId, string propertyName, object propertyValue, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                _logger.LogInformation("Updating custom property '{PropertyName}' for container {ContainerId} using GraphServiceClient",
+                    propertyName, containerId);
+
+                // Create a dictionary to hold the property value and searchable flag
+                var customPropertyValue = new Dictionary<string, object>
+                {
+                    ["value"] = propertyValue,
+                    ["isSearchable"] = true
+                };
+
+                // Create a request body with AdditionalData to specify the custom property
+                var requestBody = new FileStorageContainer
+                {
+                    AdditionalData = new Dictionary<string, object>
+                    {
+                        ["customProperties"] = new Dictionary<string, object>
+                        {
+                            [propertyName] = customPropertyValue
+                        }
+                    }
+                };
+
+
+                // Use PATCH request to update the container with new custom property
+                await _graphServiceClient.Storage.FileStorage.Containers[containerId]
+                    .PatchAsync(requestBody, cancellationToken: cancellationToken);
+
+                _logger.LogInformation("Successfully updated custom property '{PropertyName}' for container {ContainerId}",
+                    propertyName, containerId);
 
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error adding custom property to container");
+                _logger.LogError(ex, "Error updating custom property '{PropertyName}' for container {ContainerId}",
+                    propertyName, containerId);
                 throw;
             }
         }
 
-        public async Task<bool> AddThreadIdToContainer(string accessToken, string containerId, string threadId)
+
+        public async Task<IEnumerable<FileStorageContainer>> GetContainersByThreadId(string threadId, CancellationToken cancellationToken = default)
         {
-            // Add the threadId as a custom property named "threadId"
-            return await AddCustomPropertyToContainer(accessToken, containerId, "threadId", threadId);
-        }
-
-        public async Task<IEnumerable<FileStorageContainer>> GetContainersByThreadId(string accessToken, string threadId)
-        {
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("bearer", accessToken);
-
-            // This will filter containers where the threadId custom property equals the provided threadId
-            var endpoint = $"{GraphContainersEndpoint}?$filter=customProperties/threadId/value eq '{threadId}'";
-            var response = await client.GetAsync(endpoint);
-
-            if (!response.IsSuccessStatusCode)
+            try
             {
-                _logger.LogError("Failed to get containers by threadId. Status code: {StatusCode}, Reason: {Reason}",
-                    (int)response.StatusCode, response.ReasonPhrase);
+                _logger.LogInformation("Getting containers by threadId using GraphServiceClient: {ThreadId}", threadId);
+
+                // Use OData filter to query containers where the threadId custom property equals the provided threadId
+                var options = new Microsoft.Graph.Storage.FileStorage.Containers.ContainersRequestBuilder.ContainersRequestBuilderGetQueryParameters
+                {
+                    Filter = $"customProperties/threadId/value eq '{threadId}'"
+                };
+
+                // Get containers with the specified filter
+                var containers = await _graphServiceClient.Storage.FileStorage.Containers
+                    .GetAsync(requestConfiguration =>
+                    {
+                        requestConfiguration.QueryParameters = options;
+                    }, cancellationToken);
+
+                if (containers?.Value == null)
+                {
+                    _logger.LogWarning("No containers found with threadId: {ThreadId} or empty response", threadId);
+                    return Enumerable.Empty<FileStorageContainer>();
+                }
+
+                _logger.LogInformation("Successfully retrieved {Count} containers for threadId: {ThreadId}",
+                    containers.Value, threadId);
+                return containers.Value!;
+            }
+            catch (ServiceException ex)
+            {
+                _logger.LogError(ex, "GraphServiceClient error getting containers by threadId: {Status} - {Message}",
+                    ex.ResponseStatusCode, ex.Message);
                 return Enumerable.Empty<FileStorageContainer>();
             }
-
-            string content = await response.Content.ReadAsStringAsync();
-            JObject deserialized = JsonConvert.DeserializeObject<JObject>(content);
-            JArray array = deserialized.Value<JArray>("value");
-            return array.ToObject<List<FileStorageContainer>>();
-        }
-
-        public async Task<IEnumerable<Permission>> GetContainerPermissions(string accessToken, string containerId)
-        {
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("bearer", accessToken);
-            var response = await client.GetAsync($"{GraphContainersEndpoint}/{containerId}/permissions");
-
-            if (!response.IsSuccessStatusCode)
+            catch (Exception ex)
             {
-                throw new Exception($"We couldn't get the container's permissions. Status code {(int)response.StatusCode}, reason: {response.ReasonPhrase}''");
-            }
-            string content = await response.Content.ReadAsStringAsync();
-            JObject deserialized = JsonConvert.DeserializeObject<JObject>(content);
-            JArray array = deserialized.Value<JArray>("value");
-            return array.ToObject<List<Permission>>();
-        }
-
-        public async Task<Permission> UpdateContainerPermission(string accessToken, string containerId, string permissionId, string role)
-        {
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("bearer", accessToken);
-            var json = $@"{{ ""roles"":[""{role}""]}}";
-            HttpContent content = new StringContent(json, Encoding.UTF8, "application/json");
-            var response = await client.PatchAsync($"{GraphContainersEndpoint}/{containerId}/permissions/{permissionId}", content);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                throw new Exception($"We couldn't update the container's permission. Status code {(int)response.StatusCode}, reason: {response.ReasonPhrase}''");
-            }
-            return response.Content.ReadFromJsonAsync<Permission>().Result;
-        }
-
-        public async Task<Permission> AddContainerPermission(string accessToken, string containerId, Permission permission)
-        {
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("bearer", accessToken);
-            string serialized = JsonConvert.SerializeObject(permission, new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore });
-            HttpContent content = new StringContent(serialized, Encoding.UTF8, "application/json");
-            var response = await client.PostAsync($"{GraphContainersEndpoint}/{containerId}/permissions", content);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                throw new Exception($"We couldn't add the permission to the container. Status code {(int)response.StatusCode}, reason: {response.ReasonPhrase}''");
-            }
-            return response.Content.ReadFromJsonAsync<Permission>().Result;
-        }
-
-        public async Task DeleteContainerPermission(string accessToken, string containerId, string permissionId)
-        {
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("bearer", accessToken);
-            var response = await client.DeleteAsync($"{GraphContainersEndpoint}/{containerId}/permissions/{permissionId}");
-
-            if (!response.IsSuccessStatusCode)
-            {
-                throw new Exception($"We couldn't delete the permission. Status code {(int)response.StatusCode}, reason: {response.ReasonPhrase}''");
+                _logger.LogError(ex, "Error getting containers by threadId with GraphServiceClient: {ThreadId}", threadId);
+                return Enumerable.Empty<FileStorageContainer>();
             }
         }
 
-        public async Task<Drive> GetDriveAsync(string accessToken, string driveId)
+        public async Task<Drive> GetDriveAsync(string driveId)
         {
-            var graphServiceClient = getGraphClient(accessToken);
-            Drive drive = await graphServiceClient.Drives[driveId]
-            .GetAsync();
-
-            var json = JsonConvert.SerializeObject(drive);
-            Console.WriteLine(json);
+           // var graphServiceClient = getGraphClient(accessToken);
+            Drive drive = await _graphServiceClient.Drives[driveId].GetAsync();
             return drive;
         }
 
-        public Task<Drive> UpdateDrive(string accessToken, string driveId, Drive drive)
+        public async Task<DriveItem> GetDriveRoot(string driveId, CancellationToken cancellationToken = default)
         {
-            throw new NotSupportedException();
-        }
+            _logger.LogInformation("Getting drive root with GraphServiceClient for drive {DriveId}", driveId);
 
-        public Task DeleteDrive(string accessToken, string driveId)
-        {
-            throw new NotImplementedException();
-        }
-
-        //public async Task<DriveItem> GetDriveRoot(string accessToken, string driveId)
-        //{
-        //    var graphServiceClient = getGraphClient(accessToken);
-        //    return await graphServiceClient.Drives[driveId].Root.GetAsync();
-
-        //}
-
-        public async Task<DriveItem> GetDriveRoot(string accessToken, string driveId)
-        {
-            string endPoint = $"/beta/drives/{driveId}/root";
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("bearer", accessToken);
-            var response = await client.GetAsync(endPoint);
-
-            _logger.LogInformation("Request url {1}", response.RequestMessage.RequestUri.ToString());
-            _logger.LogInformation("Drive {1}", driveId);
-            if (!response.IsSuccessStatusCode)
+            try
             {
-                throw new Exception($"We couldn't get the list of driveItems. Status code {(int)response.StatusCode}, reason: {response.ReasonPhrase}''");
+                // Use the GraphServiceClient to get the drive root
+                var driveItem = await _graphServiceClient.Drives[driveId].Root
+                    .GetAsync(cancellationToken: cancellationToken);
+
+                if (driveItem != null)
+                {
+                    _logger.LogInformation("Successfully retrieved drive root for drive {DriveId}", driveId);
+                    return driveItem;
+                }
+                else
+                {
+                    throw new InvalidOperationException($"Failed to retrieve drive root for drive {driveId}");
+                }
             }
-
-            return await response.Content.ReadFromJsonAsync<DriveItem>();
-        }
-
-        public async Task<ICollection<DriveItem>> GetDriveRootItemsAsync(string accessToken, string driveId)
-        {
-            string endPoint = $"/beta/drives/{driveId}/items/root/children";
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("bearer", accessToken);
-            var response = await client.GetAsync(endPoint);
-
-            _logger.LogInformation("Request url {1}", response.RequestMessage.RequestUri.ToString());
-            _logger.LogInformation("Drive {1}", driveId);
-            if (!response.IsSuccessStatusCode)
+            catch (ServiceException ex)
             {
-                throw new Exception($"We couldn't get the list of driveItems. Status code {(int)response.StatusCode}, reason: {response.ReasonPhrase}''");
+                _logger.LogError(ex, "GraphServiceClient error getting drive root: {Status} - {Message}",
+                    ex.ResponseStatusCode, ex.Message);
+                throw;
             }
-
-            string content = await response.Content.ReadAsStringAsync();
-            JObject deserialized = JsonConvert.DeserializeObject<JObject>(content);
-            JArray array = deserialized.Value<JArray>("value");
-            return array.ToObject<List<DriveItem>>();
-
-            // return await response.Content.ReadFromJsonAsync<ICollection<DriveItem>>();
-        }
-
-        public async Task<ICollection<DriveItem>> GetDriveItems(string accessToken, string driveId, string itemId)
-        {
-            string endPoint = $"/beta/drives/{driveId}/items/{itemId}/children";
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("bearer", accessToken);
-            var response = await client.GetAsync(endPoint);
-
-            _logger.LogInformation("Request url {1}", response.RequestMessage.RequestUri.ToString());
-            _logger.LogInformation("Drive {1}", driveId);
-            _logger.LogInformation("ItemId {1}", itemId);
-            if (!response.IsSuccessStatusCode)
+            catch (Exception ex)
             {
-                throw new Exception($"We couldn't get the list of driveItems. Status code {(int)response.StatusCode}, reason: {response.ReasonPhrase}''");
+                _logger.LogError(ex, "Error getting drive root with GraphServiceClient for driveId {DriveId}", driveId);
+                throw;
             }
-
-            string content = await response.Content.ReadAsStringAsync();
-            JObject deserialized = JsonConvert.DeserializeObject<JObject>(content);
-            JArray array = deserialized.Value<JArray>("value");
-            return array.ToObject<List<DriveItem>>();
-
-            //return await response.Content.ReadFromJsonAsync<ICollection<DriveItem>>();
-
         }
 
-        //public async Task<ICollection<DriveItem>> GetDriveItems(string accessToken, string driveId, string itemId)
-        //{
-        //    var graphServiceClient = getGraphClient(accessToken);
-        //    var driveItems = await graphServiceClient.Drives[driveId].Items[itemId].Children
-        //        .GetAsync();
-
-        //    return driveItems.Value!;
-        //    //List<DriveItem> driveItemsWithPermissions = new List<DriveItem>();
-
-        //    //foreach (var driveItem in driveItems)
-        //    //{
-        //    //    var permissions = await graphServiceClient.Drives[driveId].Items[driveItem.Id].Permissions
-        //    //        .Request()
-        //    //        .GetAsync();
-
-        //    //    driveItem.Permissions = permissions;
-        //    //    driveItemsWithPermissions.Add(driveItem);
-        //    //}
-
-        //    //return driveItemsWithPermissions;
-        //}
-
-        public async Task<DriveItem> GetDriveItem(string accessToken, string driveId, string id)
+        public async Task<ICollection<DriveItem>> GetDriveRootItems(string driveId, CancellationToken cancellationToken = default)
         {
-            var graphServiceClient = getGraphClient(accessToken);
-            var driveItem = await graphServiceClient.Drives[driveId].Items[id].GetAsync();
-            //.
-            //.GetAsync(requestConfiguration => requestConfiguration.QueryParameters.Select = new string[] { "id", "createdDateTime" });
+            _logger.LogInformation("Getting drive root items with GraphServiceClient for drive {DriveId}", driveId);
 
-            //List<User> userList = usersResponse.Value;
+            try
+            {
+                // Use the GraphServiceClient to get children of the drive root
+                var result = await _graphServiceClient.Drives[driveId].Items["root"].Children.GetAsync();
+               // var response = await _graphServiceClient.Drives[driveId].Root.ItemWithPath("root").GetAsync(cancellationToken: cancellationToken);
 
+                if (result?.Value != null)
+                {
+                    _logger.LogInformation("Successfully retrieved {Count} items from drive root for drive {DriveId}",
+                        result.Value.Count, driveId);
+                    return result.Value;
+                }
+                else
+                {
+                    _logger.LogWarning("No items found in drive root or empty response for drive {DriveId}", driveId);
+                    return new List<DriveItem>();
+                }
+            }
+            catch (ServiceException ex)
+            {
+                _logger.LogError(ex, "GraphServiceClient error getting drive root items: {Status} - {Message}",
+                    ex.ResponseStatusCode, ex.Message);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting drive root items with GraphServiceClient for driveId {DriveId}", driveId);
+                throw;
+            }
+        }
+
+        public async Task<DriveItem> GetDriveItem(string driveId, string id)
+        {
+            var driveItem = await _graphServiceClient.Drives[driveId].Items[id].GetAsync();
             return driveItem;
-            // return await graphServiceClient.Drives[driveId].Items.GetAsync(new Action<Microsoft.Kiota.Abstractions.RequestConfiguration<Microsoft.Graph.Drives.Item.Items.ItemsRequestBuilder.ItemsRequestBuilderGetQueryParameters>>().);
         }
 
-        public async Task<string> GetItemPreview(string accessToken, string driveId, string itemId)
+        public async Task<string> GetItemPreview(string driveId, string itemId)
         {
-            var graphServiceClient = getGraphClient(accessToken);
-            ItemPreviewInfo preview = await graphServiceClient
+            ItemPreviewInfo preview = await _graphServiceClient
                 .Drives[driveId]
                 .Items[itemId]
                 .Preview
@@ -424,14 +298,9 @@ namespace Infrastructure.Implementations.SPE
             return preview.GetUrl;
         }
 
-        public async Task<DriveItem> UpdateDriveItem(string accessToken, string driveId, string itemId, DriveItem driveItem)
+        public async Task<DriveItem> UpdateDriveItem(string driveId, string itemId, DriveItem driveItem)
         {
-            await Task.CompletedTask;
-            return new DriveItem();
-
-            //var graphServiceClient = getGraphClient(accessToken);
-            //return await graphServiceClient.Drives[driveId].Items[itemId]
-            //    .ToPatchRequestInformation(driveItem);
+            return _graphServiceClient.Drives[driveId].Items[itemId].PatchAsync(driveItem).Result;
         }
 
         public async Task<DriveItem> CopyDriveItem(string accessToken, string driveId, string itemId, string name, ItemReference parentReference)
@@ -450,67 +319,104 @@ namespace Infrastructure.Implementations.SPE
             //Upload small file> https://docs.microsoft.com/en-us/graph/api/driveitem-put-content
             //Upload large file> https://docs.microsoft.com/en-us/graph/sdks/large-file-upload
 
-            return await UploadSmallFile(accessToken, driveId, parentId, name, stream);
+            return await UploadSmallFile(driveId, parentId, name, stream);
         }
 
-        /// <summary>
-        /// Uploads a small file (less than 4MB) directly using Graph API endpoint without GraphServiceClient
-        /// </summary>
-        /// <param name="accessToken">The access token for authentication</param>
-        /// <param name="driveId">The ID of the drive</param>
-        /// <param name="parentId">The ID of the parent folder</param>
-        /// <param name="name">The name of the file to upload</param>
-        /// <param name="stream">The stream containing the file data</param>
-        /// <returns>The created DriveItem</returns>
-        public async Task<DriveItem> UploadSmallFile(string accessToken, string driveId, string parentId, string name, Stream stream)
+        public async Task<DriveItem> UploadSmallFile(
+     string driveId,
+     string parentId,
+     string name,
+     Stream stream,
+     CancellationToken cancellationToken = default)
         {
-            _logger.LogInformation("Starting small file upload with direct API: {Name} to drive {DriveId}, parent folder {ParentId}",
+            _logger.LogInformation("Starting small file upload with GraphServiceClient: {Name} to drive {DriveId}, parent folder {ParentId}",
                 name, driveId, parentId);
 
             try
             {
-                // Create HttpClient and set authorization header
-                using var httpClient = new HttpClient();
-                httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-
-                // Prepare the URL with conflict behavior parameter
-                string apiUrl = $"https://graph.microsoft.com/v1.0/drives/{driveId}/items/{parentId}:/{name}:/content?@microsoft.graph.conflictBehavior=rename";
-
-                // Read the stream content into a byte array
-                using var memoryStream = new MemoryStream();
-                await stream.CopyToAsync(memoryStream);
-                byte[] fileData = memoryStream.ToArray();
-
-                // Create the HTTP content from the file data
-                using var content = new ByteArrayContent(fileData);
-
-                // Send the PUT request to upload the file
-                var response = await httpClient.PutAsync(apiUrl, content);
-
-                // Check if the request was successful
-                if (!response.IsSuccessStatusCode)
+                // Make sure stream is positioned at the beginning
+                if (stream.CanSeek)
                 {
-                    string errorContent = await response.Content.ReadAsStringAsync();
-                    _logger.LogError("Error uploading file: Status code {StatusCode}, Content: {ErrorContent}",
-                        response.StatusCode, errorContent);
-                    throw new HttpRequestException($"Error uploading file: {response.StatusCode}");
+                    stream.Position = 0;
                 }
 
-                // Deserialize the response to get the created DriveItem
-                string responseJson = await response.Content.ReadAsStringAsync();
-                var driveItem = JsonConvert.DeserializeObject<DriveItem>(responseJson);
+                // Use the GraphServiceClient to upload the file
+                // The path is constructed as /drives/{driveId}/items/{parentId}:/{fileName}:/content
+                var driveItem = await _graphServiceClient.Drives[driveId].Items[parentId].ItemWithPath(name).Content
+                    .PutAsync(stream, cancellationToken: cancellationToken);
 
-                _logger.LogInformation("Successfully uploaded file with direct API: {Name}, Item ID: {ItemId}",
-                    name, driveItem?.Id);
-
-                return driveItem;
+                if (driveItem != null)
+                {
+                    _logger.LogInformation("Successfully uploaded file with GraphServiceClient: {Name}, Item ID: {ItemId}",
+                        name, driveItem.Id);
+                    return driveItem;
+                }
+                else
+                {
+                    throw new InvalidOperationException("Upload succeeded but no DriveItem was returned");
+                }
+            }
+            catch (ServiceException ex)
+            {
+                _logger.LogError(ex, "GraphServiceClient error uploading file: {Status} - {Message}",
+                    ex.ResponseStatusCode, ex.Message);
+                throw;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error uploading file with direct API: {FileName}", name);
+                _logger.LogError(ex, "Error uploading file with GraphServiceClient: {FileName}", name);
                 throw;
             }
         }
+        //public async Task<DriveItem> UploadSmallFile(string accessToken, string driveId, string parentId, string name, Stream stream)
+        //{
+        //    _logger.LogInformation("Starting small file upload with direct API: {Name} to drive {DriveId}, parent folder {ParentId}",
+        //        name, driveId, parentId);
+
+        //    try
+        //    {
+        //        // Create HttpClient and set authorization header
+        //        using var httpClient = new HttpClient();
+        //        httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        //        // Prepare the URL with conflict behavior parameter
+        //        string apiUrl = $"https://graph.microsoft.com/v1.0/drives/{driveId}/items/{parentId}:/{name}:/content?@microsoft.graph.conflictBehavior=rename";
+
+        //        // Read the stream content into a byte array
+        //        using var memoryStream = new MemoryStream();
+        //        await stream.CopyToAsync(memoryStream);
+        //        byte[] fileData = memoryStream.ToArray();
+
+        //        // Create the HTTP content from the file data
+        //        using var content = new ByteArrayContent(fileData);
+
+        //        // Send the PUT request to upload the file
+        //        var response = await httpClient.PutAsync(apiUrl, content);
+
+        //        // Check if the request was successful
+        //        if (!response.IsSuccessStatusCode)
+        //        {
+        //            string errorContent = await response.Content.ReadAsStringAsync();
+        //            _logger.LogError("Error uploading file: Status code {StatusCode}, Content: {ErrorContent}",
+        //                response.StatusCode, errorContent);
+        //            throw new HttpRequestException($"Error uploading file: {response.StatusCode}");
+        //        }
+
+        //        // Deserialize the response to get the created DriveItem
+        //        string responseJson = await response.Content.ReadAsStringAsync();
+        //        var driveItem = JsonConvert.DeserializeObject<DriveItem>(responseJson);
+
+        //        _logger.LogInformation("Successfully uploaded file with direct API: {Name}, Item ID: {ItemId}",
+        //            name, driveItem?.Id);
+
+        //        return driveItem;
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        _logger.LogError(ex, "Error uploading file with direct API: {FileName}", name);
+        //        throw;
+        //    }
+        //}
 
 
         /// <summary>
@@ -643,21 +549,14 @@ namespace Infrastructure.Implementations.SPE
             }
         }
 
-        public async Task DeleteDriveItem(string accessToken, string driveId, string itemId)
+        public async Task DeleteDriveItem(string driveId, string itemId)
         {
-            var graphServiceClient = getGraphClient(accessToken);
-            await graphServiceClient.Drives[driveId].Items[itemId]
+            await _graphServiceClient.Drives[driveId].Items[itemId]
                 .DeleteAsync();
         }
 
-        public Task<ICollection<Container>> GetContainers(string uri, string accessToken)
-        {
-            //Not implemented, return an empty list
-            ICollection<Container> containers = new List<Container>();
-            return Task.FromResult(containers);
-        }
 
-        public async Task AddFolder(string accessToken, string driveId, string parentId, string name)
+        public async Task AddFolder(string driveId, string parentId, string name)
         {
             var driveItem = new DriveItem
             {
@@ -666,15 +565,14 @@ namespace Infrastructure.Implementations.SPE
                 {
                 },
                 AdditionalData = new Dictionary<string, object>()
-            {
-                {"@microsoft.graph.conflictBehavior", "rename"}
-            }
+                {
+                    {"@microsoft.graph.conflictBehavior", "rename"}
+                }
             };
-            var graphClient = getGraphClient(accessToken);
 
             try
             {
-                await graphClient.Drives[driveId].Items[parentId].Children
+                await _graphServiceClient.Drives[driveId].Items[parentId].Children
                         .PostAsync(driveItem);
             }
             catch (Exception ex)
@@ -683,17 +581,15 @@ namespace Infrastructure.Implementations.SPE
             }
         }
 
-        public async Task<ICollection<Permission>> GetPermissions(string accessToken, string driveId, string itemId)
+        public async Task<ICollection<Permission>> GetPermissions(string driveId, string itemId)
         {
-            var graphClient = getGraphClient(accessToken);
-            var permissions = await graphClient.Drives[driveId].Items[itemId].Permissions.GetAsync();
+            var permissions = await _graphServiceClient.Drives[driveId].Items[itemId].Permissions.GetAsync();
             return permissions.Value;
         }
 
-        public async Task<Permission> GetPermission(string accessToken, string driveId, string itemId, string permissionId)
+        public async Task<Permission> GetPermission(string driveId, string itemId, string permissionId)
         {
-            var graphClient = getGraphClient(accessToken);
-            var permission = await graphClient.Drives[driveId].Items[itemId].Permissions[permissionId]
+            var permission = await _graphServiceClient.Drives[driveId].Items[itemId].Permissions[permissionId]
                 .GetAsync();
             return permission;
         }
@@ -701,33 +597,30 @@ namespace Infrastructure.Implementations.SPE
         // Graph reference on permision update
         // https://learn.microsoft.com/en-us/graph/api/permission-update?view=graph-rest-beta
         //
-        public async Task UpdatePermission(string accessToken, string driveId, string itemId, string permissionId, List<string> roles)
+        public async Task UpdatePermission(string driveId, string itemId, string permissionId, List<string> roles)
         {
             var permission = new Permission
             {
                 Roles = roles
             };
 
-            var graphClient = getGraphClient(accessToken);
-            await graphClient.Drives[driveId].Items[itemId].Permissions[permissionId].PatchAsync(permission);
+            await _graphServiceClient.Drives[driveId].Items[itemId].Permissions[permissionId].PatchAsync(permission);
         }
 
         // Graph reference on permision delete
         // https://learn.microsoft.com/en-us/graph/api/permission-delete?view=graph-rest-beta
         //
-        public async Task DeletePermission(string accessToken, string driveId, string itemId, string permissionId)
+        public async Task DeletePermission(string driveId, string itemId, string permissionId)
         {
-            var graphClient = getGraphClient(accessToken);
-            await graphClient.Drives[driveId].Items[itemId].Permissions[permissionId]
+            await _graphServiceClient.Drives[driveId].Items[itemId].Permissions[permissionId]
                 .DeleteAsync();
         }
 
 
         // Graph reference on permisions
         // https://docs.microsoft.com/en-us/graph/api/driveitem-invite
-        public async Task AddPermissions(string accessToken, string driveId, string itemId, IEnumerable<string> roles, IEnumerable<DriveRecipient> recipients)
+        public async Task AddPermissions(string driveId, string itemId, IEnumerable<string> roles, IEnumerable<DriveRecipient> recipients)
         {
-            var graphClient = getGraphClient(accessToken);
 
             var requireSignIn = true;
             var sendInvitation = false;
@@ -738,23 +631,298 @@ namespace Infrastructure.Implementations.SPE
             invitePostRequestBody.SendInvitation = sendInvitation;
 
 
-            await graphClient.Drives[driveId].Items[itemId]
+            await _graphServiceClient.Drives[driveId].Items[itemId]
                  .Invite.PostAsInvitePostResponseAsync(invitePostRequestBody);
 
 
         }
 
-        public async Task<Uri> GetFileDownloadUrl(string accessToken, string driveId, string itemId)
+        public async Task<Uri> GetFileDownloadUrl(string driveId, string itemId)
         {
-            HttpClient client = GetHttpClient(accessToken, "application/json");
-            var response = await client.GetAsync($"v1.0/drives/{driveId}/items/{itemId}/content");
-
-            if (!response.IsSuccessStatusCode)
+            try
             {
-                throw new Exception($"We couldn't download the file, status code {(int)response.StatusCode}, reason: {response.ReasonPhrase}''");
-            }
+                // Use the GraphServiceClient to get the download URL
+                var driveItem = await _graphServiceClient.Drives[driveId].Items[itemId]
+                    .GetAsync(requestConfiguration =>
+                    {
+                        requestConfiguration.QueryParameters.Select = new[] { "@microsoft.graph.downloadUrl" };
+                    });
 
-            return response.RequestMessage.RequestUri;
+                // Check if the download URL is available
+                if (driveItem?.AdditionalData != null && driveItem.AdditionalData.TryGetValue("@microsoft.graph.downloadUrl", out var downloadUrl))
+                {
+                    return new Uri(downloadUrl.ToString());
+                }
+
+                throw new InvalidOperationException("Download URL not found for the specified file.");
+            }
+            catch (ServiceException ex)
+            {
+                _logger.LogError(ex, "Error retrieving file download URL for driveId: {DriveId}, itemId: {ItemId}", driveId, itemId);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unexpected error retrieving file download URL for driveId: {DriveId}, itemId: {ItemId}", driveId, itemId);
+                throw;
+            }
+        }
+
+        
+
+        /// <summary>
+        /// Searches for drive items using the Microsoft Graph SDK search API.
+        /// This is using the custom sendrequest since the Graph SDK doesn't support the new SharePointOneDriveOptions { IncludeHiddenContent = true } yet, 
+        /// which makes it impossible not query for documents in SPE
+        /// </summary>
+        /// <param name="searchString">The search query string</param>
+        /// <param name="containerTypeId">Optional container type ID to filter results</param>
+        /// <param name="maxResults">Maximum number of results to return</param>
+        /// <param name="cancellationToken">Cancellation token for the operation</param>
+        /// <returns>A list of DriveItems matching the search criteria</returns>
+        public async Task<List<DriveItem>> SearchDriveItems(
+            string searchString,
+            string? containerTypeId = null,
+            int maxResults = 100,
+            CancellationToken cancellationToken = default)
+        {
+
+            try
+            {
+                // Build the query string
+                string queryString = !string.IsNullOrEmpty(containerTypeId)
+                    ? $"({searchString}) AND (containerTypeId:{containerTypeId})"
+                    : searchString;
+
+                _logger.LogInformation("Searching drive items with GraphServiceClient. Query: '{SearchString}'", queryString);
+
+                var requestBody = new SearchRequestBody
+                {
+                    Requests = new List<SearchRequestItem>
+                    {
+                        new SearchRequestItem
+                        {
+                            EntityTypes = new List<string> { "driveItem" },
+                            Query = new SearchQuery { QueryString = queryString },
+                            Size = maxResults,
+                            SharePointOneDriveOptions = new SharePointOneDriveOptions { IncludeHiddenContent = true },
+                            From = 0,
+                            Fields = new List<string> { "id", "name", "createdDateTime", "lastModifiedDateTime",
+                                                      "size", "threadIdOWSTEXT", "parentReference" }
+                        }
+                    }
+                };
+
+                // To initialize your graphClient, see https://learn.microsoft.com/en-us/graph/sdks/create-client?from=snippets&tabs=csharp
+                var response = await SendCustomRequestAsync("/search/query", requestBody, HttpMethod.Post, cancellationToken);
+
+                // Parse the response first to get the "value" array
+                var jsonDocument = JsonDocument.Parse(response.GetRawText());
+                var valueArray = jsonDocument.RootElement.GetProperty("value");
+
+                // Process search results and extract DriveItems
+                var driveItems = new List<DriveItem>();
+
+                // Navigate through the response structure
+                // Process each search result in the value array
+                foreach (var searchResultElement in valueArray.EnumerateArray())
+                {
+                    try
+                    {
+                        // Check if we have hitsContainers property
+                        if (!searchResultElement.TryGetProperty("hitsContainers", out var hitsContainersElement) ||
+                            hitsContainersElement.ValueKind != JsonValueKind.Array)
+                        {
+                            continue; // Skip if no valid hits containers
+                        }
+
+                        // Process each hits container
+                        foreach (var hitsContainer in hitsContainersElement.EnumerateArray())
+                        {
+                            // Get hits array from the container
+                            if (!hitsContainer.TryGetProperty("hits", out var hitsElement) ||
+                                hitsElement.ValueKind != JsonValueKind.Array)
+                            {
+                                continue; // Skip if no valid hits
+                            }
+
+                            // Process each individual hit
+                            foreach (var hit in hitsElement.EnumerateArray())
+                            {
+                                try
+                                {
+                                    int rank = hit.TryGetProperty("rank", out var rankElement) &&
+                                        rankElement.ValueKind == JsonValueKind.Number ?
+                                        rankElement.GetInt32() : 0;
+
+                                    // Get the resource object that contains the DriveItem
+                                    if (!hit.TryGetProperty("resource", out var resourceElement) ||
+                                        resourceElement.ValueKind != JsonValueKind.Object)
+                                    {
+                                        continue; // Skip invalid resources
+                                    }
+
+                                    // Create a new DriveItem and populate from the JSON
+                                    var driveItem = new DriveItem
+                                    {
+                                        // Initialize AdditionalData to store hit info and other metadata
+                                        AdditionalData = new Dictionary<string, object>()
+                                    };
+
+                                    // Extract basic properties
+                                    if (resourceElement.TryGetProperty("id", out var idElement))
+                                        driveItem.Id = idElement.GetString();
+
+                                    if (resourceElement.TryGetProperty("name", out var nameElement))
+                                        driveItem.Name = nameElement.GetString();
+
+                                    if (resourceElement.TryGetProperty("size", out var sizeElement) &&
+                                        sizeElement.ValueKind == JsonValueKind.Number)
+                                        driveItem.Size = sizeElement.GetInt64();
+
+                                    if (resourceElement.TryGetProperty("createdDateTime", out var createdElement))
+                                        driveItem.CreatedDateTime = createdElement.GetDateTimeOffset();
+
+                                    if (resourceElement.TryGetProperty("lastModifiedDateTime", out var modifiedElement))
+                                        driveItem.LastModifiedDateTime = modifiedElement.GetDateTimeOffset();
+
+                                    // Extract parentReference if it exists
+                                    if (resourceElement.TryGetProperty("parentReference", out var parentElement) &&
+                                        parentElement.ValueKind == JsonValueKind.Object)
+                                    {
+                                        var parentRef = new ItemReference();
+
+                                        if (parentElement.TryGetProperty("driveId", out var driveIdElement))
+                                            parentRef.DriveId = driveIdElement.GetString();
+
+                                        if (parentElement.TryGetProperty("id", out var parentIdElement))
+                                            parentRef.Id = parentIdElement.GetString();
+
+                                        driveItem.ParentReference = parentRef;
+                                    }
+
+                                    // Extract listItem fields if available (particularly threadId)
+                                    if (resourceElement.TryGetProperty("listItem", out var listItemElement) &&
+                                        listItemElement.ValueKind == JsonValueKind.Object &&
+                                        listItemElement.TryGetProperty("fields", out var fieldsElement) &&
+                                        fieldsElement.ValueKind == JsonValueKind.Object)
+                                    {
+                                        // Look for threadIdOWSTEXT or any other specific fields
+                                        if (fieldsElement.TryGetProperty("threadIdOWSTEXT", out var threadIdElement))
+                                        {
+                                            string threadId = threadIdElement.GetString();
+                                            driveItem.AdditionalData["threadId"] = threadId;
+                                            _logger.LogDebug("Found threadId: {ThreadId} for file: {FileName}",
+                                                threadId, driveItem.Name);
+                                        }
+
+                                        // Optionally store the listItem ID
+                                        if (listItemElement.TryGetProperty("id", out var listItemIdElement))
+                                            driveItem.AdditionalData["listItemId"] = listItemIdElement.GetString();
+                                    }
+
+                                    // Add to results
+                                    driveItems.Add(driveItem);
+                                }
+                                catch (Exception ex)
+                                {
+                                    _logger.LogError(ex, "Error processing individual search hit: {Message}", ex.Message);
+                                    // Continue with other hits
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error processing search result: {Message}", ex.Message);
+                        // Continue with other search results
+                    }
+                }
+
+                _logger.LogInformation("Search completed successfully with direct JSON parsing. Found {Count} items.", driveItems.Count);
+                return driveItems;
+
+            }
+            catch (ServiceException ex)
+            {
+                _logger.LogError(ex, "GraphServiceClient error searching drive items: {Status} - {Message}",
+                    ex.ResponseStatusCode, ex.Message);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error searching drive items with GraphServiceClient: {Message}", ex.Message);
+                throw;
+            }
+        }
+
+        // this is a custom request implementation to the Graph API using the GraphServiceClient
+        internal async Task<JsonElement> SendCustomRequestAsync(
+            string endpoint,
+            object requestBody,
+            HttpMethod method = null,
+            CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                _logger.LogInformation("Sending custom request to endpoint: {Endpoint}", endpoint);
+
+                if (_graphServiceClient.RequestAdapter is not Microsoft.Kiota.Http.HttpClientLibrary.HttpClientRequestAdapter httpAdapter)
+                {
+                    throw new InvalidOperationException("GraphServiceClient is not using HttpClientRequestAdapter");
+                }
+
+                // Default to POST if not specified
+                method ??= HttpMethod.Post;
+
+                // Create a request information object
+                var requestInfo = new Microsoft.Kiota.Abstractions.RequestInformation
+                {
+                    HttpMethod = Method.POST,
+                    URI = new Uri($"{httpAdapter.BaseUrl?.TrimEnd('/')}/{endpoint.TrimStart('/')}"),
+                };
+
+                // Serialize the request body using the client's serializer
+                string contentType = "application/json";
+
+                // Ensure the requestBody is cast to IParsable before calling SetContentFromParsable
+                if (requestBody is IParsable parsableRequestBody)
+                {
+                    requestInfo.SetContentFromParsable(
+                        httpAdapter,
+                        contentType,
+                        parsableRequestBody);
+                }
+                else
+                {
+                    throw new InvalidOperationException("The requestBody must implement IParsable.");
+                }
+
+                // Send the request via the adapter
+                using var stream = await httpAdapter.SendPrimitiveAsync<Stream>(
+                    requestInfo,
+                    cancellationToken: cancellationToken);
+
+                // Parse the response
+                if (stream != null)
+                {
+                    using var jsonDoc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+                    return jsonDoc.RootElement.Clone();
+                }
+
+                return new JsonElement();
+            }
+            catch (ServiceException ex)
+            {
+                _logger.LogError(ex, "GraphServiceClient error sending custom request: {Status} - {Message}",
+                    ex.ResponseStatusCode, ex.Message);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error sending custom request: {Message}", ex.Message);
+                throw;
+            }
         }
 
         /// <summary>
@@ -765,226 +933,157 @@ namespace Infrastructure.Implementations.SPE
         /// <param name="containerTypeId">Optional container type ID to filter results (defaults to null)</param>
         /// <param name="maxResults">Maximum number of results to return (defaults to 100)</param>
         /// <returns>A list of DriveItems matching the search criteria</returns>
-        public async Task<List<DriveItem>> SearchDriveItems(string accessToken, string searchString, string containerTypeId = null, int maxResults = 100)
-        {
-            _logger.LogInformation("Searching drive items with direct API. Query: '{SearchString}'", searchString);
+        //public async Task<List<DriveItem>> SearchDriveItems(string accessToken, string searchString, string containerTypeId = null, int maxResults = 100)
+        //{
+        //    _logger.LogInformation("Searching drive items with direct API. Query: '{SearchString}'", searchString);
 
-            try
-            {
-                // Create the request URL
-                string endpoint = "https://graph.microsoft.com/beta/search/query";
+        //    try
+        //    {
+        //        // Create the request URL
+        //        string endpoint = "https://graph.microsoft.com/beta/search/query";
 
-                // Build the query string
-                string queryString = !string.IsNullOrEmpty(containerTypeId)
-                    ? $"({searchString}) AND (containerTypeId:{containerTypeId})"
-                    : searchString;
+        //        // Build the query string
+        //        string queryString = !string.IsNullOrEmpty(containerTypeId)
+        //            ? $"({searchString}) AND (containerTypeId:{containerTypeId})"
+        //            : searchString;
 
-                // Create the request payload
-                var requestBody = new
-                {
-                    requests = new[]
-                    {
-                        new
-                        {
-                            entityTypes = new[] { "driveItem" },
-                            query = new
-                            {
-                                queryString
-                            },
-                            size = maxResults,
-                            sharePointOneDriveOptions = new
-                            {
-                                includeHiddenContent = true
-                            },
-                            from = 0,
-                            fields =  new [] { "id", "name", "createdDateTime", "lastModifiedDateTime", "size", "threadIdOWSTEXT", "parentReference" }
-                        }
-                    }
-                };
+        //        // Create the request payload
+        //        var requestBody = new
+        //        {
+        //            requests = new[]
+        //            {
+        //                new
+        //                {
+        //                    entityTypes = new[] { "driveItem" },
+        //                    query = new
+        //                    {
+        //                        queryString
+        //                    },
+        //                    size = maxResults,
+        //                    sharePointOneDriveOptions = new
+        //                    {
+        //                        includeHiddenContent = true
+        //                    },
+        //                    from = 0,
+        //                    fields =  new [] { "id", "name", "createdDateTime", "lastModifiedDateTime", "size", "threadIdOWSTEXT", "parentReference" }
+        //                }
+        //            }
+        //        };
 
-                // Serialize the request body
-                string jsonRequest = JsonConvert.SerializeObject(requestBody);
+        //        // Serialize the request body
+        //        string jsonRequest = JsonConvert.SerializeObject(requestBody);
 
-                // Create HTTP client and set headers
-                using var httpClient = new HttpClient();
-                httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        //        // Create HTTP client and set headers
+        //        using var httpClient = new HttpClient();
+        //        httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
-                // Send the POST request
-                using var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
-                var response = await httpClient.PostAsync(endpoint, content);
+        //        // Send the POST request
+        //        using var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
+        //        var response = await httpClient.PostAsync(endpoint, content);
 
-                // Check if request was successful
-                if (!response.IsSuccessStatusCode)
-                {
-                    string errorContent = await response.Content.ReadAsStringAsync();
-                    _logger.LogError("Search request failed. Status: {StatusCode}, Error: {Error}",
-                        response.StatusCode, errorContent);
-                    throw new HttpRequestException($"Search request failed with status code {response.StatusCode}");
-                }
+        //        // Check if request was successful
+        //        if (!response.IsSuccessStatusCode)
+        //        {
+        //            string errorContent = await response.Content.ReadAsStringAsync();
+        //            _logger.LogError("Search request failed. Status: {StatusCode}, Error: {Error}",
+        //                response.StatusCode, errorContent);
+        //            throw new HttpRequestException($"Search request failed with status code {response.StatusCode}");
+        //        }
 
-                // Parse the response
-                string responseContent = await response.Content.ReadAsStringAsync();
-                JObject responseObject = JObject.Parse(responseContent);
+        //        // Parse the response
+        //        string responseContent = await response.Content.ReadAsStringAsync();
+        //        JObject responseObject = JObject.Parse(responseContent);
 
-                // Extract drive items from the search results
-                var driveItems = new List<DriveItem>();
+        //        // Extract drive items from the search results
+        //        var driveItems = new List<DriveItem>();
 
-                // Navigate through the response structure
-                var valueArray = responseObject["value"] as JArray;
-                if (valueArray != null && valueArray.Count > 0)
-                {
-                    var hitsContainers = valueArray[0]["hitsContainers"] as JArray;
-                    if (hitsContainers != null && hitsContainers.Count > 0)
-                    {
-                        var hits = hitsContainers[0]["hits"] as JArray;
-                        if (hits != null)
-                        {
-                            foreach (var hit in hits)
-                            {
-                                // Extract the DriveItem from the resource property
-                                var resourceObject = hit["resource"];
-                                if (resourceObject != null && resourceObject["@odata.type"]?.ToString() == "#microsoft.graph.driveItem")
-                                {
-                                    try
-                                    {
-                                        // Convert to DriveItem
-                                        var driveItem = resourceObject.ToObject<DriveItem>();
+        //        // Navigate through the response structure
+        //        var valueArray = responseObject["value"] as JArray;
+        //        if (valueArray != null && valueArray.Count > 0)
+        //        {
+        //            var hitsContainers = valueArray[0]["hitsContainers"] as JArray;
+        //            if (hitsContainers != null && hitsContainers.Count > 0)
+        //            {
+        //                var hits = hitsContainers[0]["hits"] as JArray;
+        //                if (hits != null)
+        //                {
+        //                    foreach (var hit in hits)
+        //                    {
+        //                        // Extract the DriveItem from the resource property
+        //                        var resourceObject = hit["resource"];
+        //                        if (resourceObject != null && resourceObject["@odata.type"]?.ToString() == "#microsoft.graph.driveItem")
+        //                        {
+        //                            try
+        //                            {
+        //                                // Convert to DriveItem
+        //                                var driveItem = resourceObject.ToObject<DriveItem>();
 
-                                        // Ensure AdditionalData dictionary exists
-                                        if (driveItem.AdditionalData == null)
-                                        {
-                                            driveItem.AdditionalData = new Dictionary<string, object>();
-                                        }
+        //                                // Ensure AdditionalData dictionary exists
+        //                                if (driveItem.AdditionalData == null)
+        //                                {
+        //                                    driveItem.AdditionalData = new Dictionary<string, object>();
+        //                                }
 
-                                        // Extract listItem fields if they exist
-                                        if (resourceObject["listItem"] != null &&
-                                            resourceObject["listItem"]["fields"] != null)
-                                        {
-                                            var fields = resourceObject["listItem"]["fields"];
+        //                                // Extract listItem fields if they exist
+        //                                if (resourceObject["listItem"] != null &&
+        //                                    resourceObject["listItem"]["fields"] != null)
+        //                                {
+        //                                    var fields = resourceObject["listItem"]["fields"];
 
-                                            // Add threadId to AdditionalData if it exists
-                                            if (fields["threadIdOWSTEXT"] != null)
-                                            {
-                                                string threadId = fields["threadIdOWSTEXT"].ToString();
-                                                driveItem.AdditionalData["threadId"] = threadId;
+        //                                    // Add threadId to AdditionalData if it exists
+        //                                    if (fields["threadIdOWSTEXT"] != null)
+        //                                    {
+        //                                        string threadId = fields["threadIdOWSTEXT"].ToString();
+        //                                        driveItem.AdditionalData["threadId"] = threadId;
 
-                                                // Log for debugging
-                                                _logger.LogDebug("Found threadId: {ThreadId} for file: {FileName}",
-                                                    threadId, driveItem.Name);
-                                            }
+        //                                        // Log for debugging
+        //                                        _logger.LogDebug("Found threadId: {ThreadId} for file: {FileName}",
+        //                                            threadId, driveItem.Name);
+        //                                    }
 
-                                            // Store the entire fields object for completeness
-                                            driveItem.AdditionalData["listItemFields"] = fields.ToObject<Dictionary<string, object>>();
+        //                                    // Store the entire fields object for completeness
+        //                                    driveItem.AdditionalData["listItemFields"] = fields.ToObject<Dictionary<string, object>>();
 
-                                            // If there's a listItem ID, store it too
-                                            if (resourceObject["listItem"]["id"] != null)
-                                            {
-                                                driveItem.AdditionalData["listItemId"] = resourceObject["listItem"]["id"].ToString();
-                                            }
-                                        }
+        //                                    // If there's a listItem ID, store it too
+        //                                    if (resourceObject["listItem"]["id"] != null)
+        //                                    {
+        //                                        driveItem.AdditionalData["listItemId"] = resourceObject["listItem"]["id"].ToString();
+        //                                    }
+        //                                }
 
-                                        // Store the hit ID and rank for reference
-                                        if (hit["hitId"] != null)
-                                        {
-                                            driveItem.AdditionalData["hitId"] = hit["hitId"].ToString();
-                                        }
+        //                                // Store the hit ID and rank for reference
+        //                                if (hit["hitId"] != null)
+        //                                {
+        //                                    driveItem.AdditionalData["hitId"] = hit["hitId"].ToString();
+        //                                }
 
-                                        if (hit["rank"] != null && hit["rank"].Type == JTokenType.Integer)
-                                        {
-                                            driveItem.AdditionalData["searchRank"] = hit["rank"].Value<int>();
-                                        }
+        //                                if (hit["rank"] != null && hit["rank"].Type == JTokenType.Integer)
+        //                                {
+        //                                    driveItem.AdditionalData["searchRank"] = hit["rank"].Value<int>();
+        //                                }
 
-                                        driveItems.Add(driveItem);
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        _logger.LogError(ex, "Error processing search hit: {Message}", ex.Message);
-                                        // Continue processing other hits even if one fails
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+        //                                driveItems.Add(driveItem);
+        //                            }
+        //                            catch (Exception ex)
+        //                            {
+        //                                _logger.LogError(ex, "Error processing search hit: {Message}", ex.Message);
+        //                                // Continue processing other hits even if one fails
+        //                            }
+        //                        }
+        //                    }
+        //                }
+        //            }
+        //        }
 
-                _logger.LogInformation("Search completed successfully. Found {Count} items.", driveItems.Count);
-                return driveItems;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error searching drive items: {Message}", ex.Message);
-                throw;
-            }
-        }
+        //        _logger.LogInformation("Search completed successfully. Found {Count} items.", driveItems.Count);
+        //        return driveItems;
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        _logger.LogError(ex, "Error searching drive items: {Message}", ex.Message);
+        //        throw;
+        //    }
+        //}
 
-        public async Task<ICollection<DriveItem>> SearchInDrive(string accessToken, string driveId, string searchString)
-        {
-            await Task.CompletedTask;
-            //var graphServiceClient = getGraphClient(accessToken);
-            //var driveItems = await graphServiceClient.Drives[driveId].Root
-            //    .Search(searchString)
-            //    .Request()
-            //    .GetAsync();
-
-            return new List<DriveItem>();
-        }
-
-        public async Task<ICollection<DriveItem>> SearchForCurrentUser(string accessToken, string searchString)
-        {
-            //var graphServiceClient = getGraphClient(accessToken);
-            //var driveItems = await graphServiceClient.Me.Drive.Root
-            //    .Search(searchString)
-            //    .Request()
-            //    .GetAsync();
-
-            //return driveItems;
-
-            await Task.CompletedTask;
-            return new List<DriveItem>();
-        }
-
-
-        /// <summary>
-        /// Prepares an authenticated HTTP client.
-        /// </summary>
-        /// <param name="accessToken">The access token.</param>
-        private HttpClient GetHttpClient(string token, string responseMediaType = null)
-        {
-            HttpClient client = _httpClientFactory.CreateClient();
-            client.BaseAddress = new Uri("https://graph.microsoft.com/beta");
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("bearer", token);
-            if (responseMediaType != null)
-                client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue(responseMediaType));
-            return client;
-        }
-
-        /// <summary>
-        /// Prepares the authenticated client.
-        /// </summary>
-        /// <param name="accessToken">The access token.</param>
-        private GraphServiceClient getGraphClient(string accessToken)
-        {
-            /***
-            //Microsoft Azure AD Graph API endpoint,
-            'https://graph.microsoft.com'   Microsoft Graph global service
-            'https://graph.microsoft.us' Microsoft Graph for US Government
-            'https://graph.microsoft.de' Microsoft Graph Germany
-            'https://microsoftgraph.chinacloudapi.cn' Microsoft Graph China
-                ***/
-
-            //string graphEndpoint = _configuration.GetValue<string>("GraphAPI:Endpoint");
-            //return new GraphServiceClient(graphEndpoint,
-            //                new DelegateAuthenticationProvider(
-            //                    async (requestMessage) =>
-            //                    {
-            //                        await Task.Run(() =>
-            //                        {
-            //                            requestMessage.Headers.Authorization = new AuthenticationHeaderValue("bearer", accessToken);
-            //                        });
-            //                    }));
-
-            var graphServiceClient = new GraphServiceClient(GetHttpClient(accessToken));
-            return graphServiceClient;
-        }
     }
 }

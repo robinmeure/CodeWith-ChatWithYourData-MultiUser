@@ -221,7 +221,7 @@ namespace WebApi.Controllers
                 try
                 {
                     var chatHistory = new ChatHistory("health check test", AuthorRole.User);
-                    var chatCompletion = await _aiservice.GetChatCompletion(chatHistory);
+                    var chatCompletion = await _aiservice.GetChatCompletion(chatHistory, Enums.CompletionType.Chat);
 
                     healthStatus.Components["AIService"] = new ComponentStatus
                     {

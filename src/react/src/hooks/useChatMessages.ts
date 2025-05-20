@@ -5,6 +5,7 @@ import { IChatMessage } from "../models/ChatMessage";
 import { useAuth } from "./useAuth";
 import readNDJSONStream from "ndjson-readablestream";
 import LoggingService from "../services/LoggingService";
+import { IChatMessageRequest } from "../models/ChatMessageRequest";
 
 export const useChatMessages = (chatId: string | undefined) => {
     const chatService = new ChatService();
@@ -30,9 +31,15 @@ export const useChatMessages = (chatId: string | undefined) => {
             setMessages(messagesResult.filter(message => message.role !== 'system'));
         }
     }, [messagesResult]);
+    
+    // Clear messages when chatId changes
+    useEffect(() => {
+        // Reset messages when chat changes
+        setMessages([]);
+    }, [chatId]);
 
     // Existing sendMessage implementation
-    const sendMessage = async ({ message }: { message: string }) => {
+    const sendMessage = async ({ message }: { message: IChatMessageRequest }) => {
         if (!chatId) return false; 
         let result = '';
         setMessages(prev => {
@@ -40,7 +47,7 @@ export const useChatMessages = (chatId: string | undefined) => {
             updated.push(
                 {
                     role: 'user',
-                    content: message
+                    content: message.message
                 },
                 {
                     role: 'assistant',
@@ -139,14 +146,14 @@ export const useChatMessages = (chatId: string | undefined) => {
         }
         return true;
     };    // Method to handle message streaming with SSE format
-    const sendMessageStream = async ({ message }: { message: string }) => {
+    const sendMessageStream = async ({ message }: { message: IChatMessageRequest }) => {
         if (!chatId) return false; 
         let result = '';
         
         // Add initial messages for UI feedback
         setMessages(prev => [
             ...prev,
-            { role: 'user', content: message },
+            { role: 'user', content: message.message },
             { role: 'assistant', content: '' }
         ]);
 
@@ -213,7 +220,7 @@ export const useChatMessages = (chatId: string | undefined) => {
                                     }
                                     
                                     // Check if this is the final message containing followupQuestions
-                                    let contextData = eventData.context || {};
+                                    const contextData = eventData.context || {};
                                     
                                     // If eventData has followupQuestions and final=true, add to context                                    
                                     if (eventData.final === true && eventData.followupQuestions) 
@@ -222,6 +229,16 @@ export const useChatMessages = (chatId: string | undefined) => {
                                         if (!contextData.followup_questions) 
                                         {
                                             contextData.followup_questions = eventData.followupQuestions;
+                                            result = eventData.content;
+                                        }
+                                    }
+                                     // If eventData has followupQuestions and final=true, add to context                                    
+                                    if (eventData.final === true && eventData.usageMetrics) 
+                                    {
+                                        LoggingService.log('Found final message with usage metrics:', eventData.usageMetrics);
+                                        if (!contextData.usage_metrics) 
+                                        {
+                                            contextData.usage_metrics = eventData.usageMetrics;
                                             result = eventData.content;
                                         }
                                     }

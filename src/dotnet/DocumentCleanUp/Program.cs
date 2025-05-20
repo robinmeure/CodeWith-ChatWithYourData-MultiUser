@@ -1,8 +1,14 @@
 using Azure.Identity;
-using Azure.Search.Documents.Indexes;
 using Azure.Search.Documents;
+using Azure.Search.Documents.Indexes;
+using CleanUpJobs.Jobs;
 using Infrastructure;
 using Infrastructure.Helpers;
+using Infrastructure.Implementations.AISearch;
+using Infrastructure.Implementations.Blob;
+using Infrastructure.Implementations.Cosmos;
+using Infrastructure.Implementations.SPE;
+using Infrastructure.Interfaces;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Azure;
@@ -10,11 +16,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using System.Configuration;
-using DocumentCleanUp;
-using Infrastructure.Interfaces;
-using Infrastructure.Implementations.Cosmos;
-using Infrastructure.Implementations.Blob;
-using Infrastructure.Implementations.AISearch;
 
 var host = new HostBuilder()
     .ConfigureFunctionsWebApplication()
@@ -26,14 +27,22 @@ var host = new HostBuilder()
              DefaultCredentialOptions.GetDefaultAzureCredentialOptions(hostContext.Configuration["ASPNETCORE_ENVIRONMENT"]);
        var azureCredential = new DefaultAzureCredential(azureCredentialOptions);
 
+       // ---------- SharePoint Embedded Implementation ----------------
+       services.AddScoped<MSGraphService>(); // this is needed to work with SharePoint Embedded
+       services.AddScoped<IDocumentStore, SPEDocumentStore>(); // this makes use of SharePoint Embedded
 
-       services.AddAzureClients(clientBuilder =>
-       {
-           // Register clients for each service
-           Uri serviceUri = new Uri(hostContext.Configuration["StorageServiceUri"]);
-           clientBuilder.AddBlobServiceClient(serviceUri);
-           clientBuilder.UseCredential(azureCredential);
-       });
+       // -----------------------------------------------------
+
+       // ---------- Azure Blob Implementation ----------------
+       //services.AddAzureClients(clientBuilder =>
+       //{
+       //    // Register clients for each service
+       //    Uri serviceUri = new Uri(hostContext.Configuration["StorageServiceUri"]);
+       //    clientBuilder.AddBlobServiceClient(serviceUri);
+       //    clientBuilder.UseCredential(azureCredential);
+       //});
+       //services.AddSingleton<IDocumentStore, BlobDocumentStore>();
+       // -----------------------------------------------------
 
        Uri serviceUri = new Uri(hostContext.Configuration["SearchEndPoint"]);
        string indexName = hostContext.Configuration["SearchIndexName"];
@@ -57,8 +66,7 @@ var host = new HostBuilder()
 
 
        services.AddSingleton<IDocumentRegistry, CosmosDocumentRegistry>();
-       services.AddSingleton<ISearchService, AISearchService>();
-       services.AddSingleton<IDocumentStore, BlobDocumentStore>();
+       services.AddSingleton<ISearchService, AISearchService>();       
        services.AddSingleton<IThreadRepository, CosmosThreadRepository>();
 
        services.AddSingleton<ThreadCleanup>();

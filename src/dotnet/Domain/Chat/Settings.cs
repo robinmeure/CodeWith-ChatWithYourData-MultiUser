@@ -20,6 +20,7 @@ namespace Domain.Chat
 
         public double Temperature { get; set; }
         public int Seed { get; set; }
+        public List<Tool>? Tools { get; set; }
     }
 
     public record PredefinedPrompt
@@ -29,7 +30,14 @@ namespace Domain.Chat
         public required string Prompt { get; set; }
     }
 
-
+    public record Tool
+    {
+        public required string Id { get; set; }
+        public required string Name { get; set; }
+        public required string Description { get; set; }
+        //public required string ToolType { get; set; }
+        //public required string ToolName { get; set; }
+    }
 
     public class ThreadSafeSettings
     {
@@ -55,7 +63,8 @@ namespace Domain.Chat
                     AllowInitialPromptToHelpUser = _settings.AllowInitialPromptToHelpUser,
                     PredefinedPrompts = _settings.PredefinedPrompts?.ToList(), // Create a new list
                     Temperature = _settings.Temperature,
-                    Seed = _settings.Seed
+                    Seed = _settings.Seed,
+                    Tools = _settings.Tools
                 };
             }
             finally

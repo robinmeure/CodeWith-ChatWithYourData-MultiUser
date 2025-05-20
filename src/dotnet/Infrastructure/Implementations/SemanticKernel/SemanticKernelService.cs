@@ -13,22 +13,15 @@ using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.AzureOpenAI;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
 using OpenAI.Chat;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Net;
-using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using Infrastructure.Implementations.SemanticKernel.Agents;
 using ChatMessageContent = Microsoft.SemanticKernel.ChatMessageContent;
-using Azure.Search.Documents.Models;
-using DocumentFormat.OpenXml.Office2016.Drawing.ChartDrawing;
-using Infrastructure.Implementations.AISearch;
-using DocumentFormat.OpenXml.Wordprocessing;
-using Microsoft.Extensions.AI;
+using static Domain.Chat.Enums;
+using Microsoft.SemanticKernel.Connectors.AzureAIInference;
+using Newtonsoft.Json.Linq;
 
 namespace Infrastructure.Implementations.SemanticKernel
 {
@@ -36,7 +29,7 @@ namespace Infrastructure.Implementations.SemanticKernel
     {
         private readonly Kernel _kernel;
         private IChatCompletionService _chatCompletionService;
-        private IChatCompletionService _reasoningCompletionService;
+        private IChatCompletionService? _reasoningCompletionService;
         private IServiceProvider _serviceProvider;
 
         private readonly ILogger<SemanticKernelService> _logger;
@@ -45,6 +38,8 @@ namespace Infrastructure.Implementations.SemanticKernel
 
         // Rate limit regex pattern to extract the retry time
         private static readonly Regex _rateLimitRegex = new Regex(@"Try again in (\d+) seconds", RegexOptions.Compiled);
+
+      
 
         public SemanticKernelService(
             Kernel kernel,
@@ -90,10 +85,13 @@ namespace Infrastructure.Implementations.SemanticKernel
 
         public async Task<string[]> GenerateFollowUpQuestionsAsync(ChatHistory history, string assistantResponse, string question)
         {
-            var executionSettings = new OpenAIPromptExecutionSettings()
+
+
+            var executionSettings = new AzureAIInferencePromptExecutionSettings()
             {
-                ResponseFormat = typeof(FollowUpResponse),
-                Temperature = _settings.GetSettings().Temperature,
+                //ResponseFormat = typeof(FollowUpResponse),
+                
+              //  Temperature = float.Parse(_settings.GetSettings().Temperature),
                 Seed = _settings.GetSettings().Seed,
                 ServiceId = "completion"
             };
@@ -120,8 +118,17 @@ namespace Infrastructure.Implementations.SemanticKernel
 
             try
             {
-                var followUp = JsonSerializer.Deserialize<FollowUpResponse>(completionResponse.Content);
-                return followUp?.FollowUpQuestions ?? Array.Empty<string>();
+                var followUp = JsonSerializer.Deserialize<List<string>>(completionResponse.Content);
+                if (followUp == null)
+                {
+                    _logger.LogWarning("Failed to deserialize follow-up questions response");
+                    return Array.Empty<string>();
+                }
+                string[] followUpQuestions = followUp
+                    .Select(q => q.ToString())
+                    .ToArray();
+
+                return followUpQuestions;
             }
             catch (JsonException ex)
             {
@@ -225,30 +232,48 @@ namespace Infrastructure.Implementations.SemanticKernel
                 await foreach (var chunk in streamingAnswer)
                 {
                     // Centralized logging for token usage if available.
-                    if (chunk.InnerContent is ChatCompletion chatCompletion)
+                    if (chunk.InnerContent is StreamingChatCompletionUpdate chatCompletion)
                     {
-                        _logger.LogInformation("Streaming chunk --- Input tokens: {InputTokens}, Output tokens: {OutputTokens}",
-                            chatCompletion.Usage.InputTokenCount, chatCompletion.Usage.OutputTokenCount);
+                        if (chatCompletion.Usage != null)
+                        {
+
+                            _logger.LogInformation("Streaming chunk --- Input tokens: {InputTokens}, Output tokens: {OutputTokens}",
+                                chatCompletion.Usage.InputTokenCount, chatCompletion.Usage.OutputTokenCount);
+                        }
                     }
                     yield return chunk;
                 }
             }
         }
 
-        public async Task<CompletionResponse> GetChatCompletion(ChatHistory history)
+        public async Task<CompletionResponse> GetChatCompletion(ChatHistory history, CompletionType completionType)
         {
             var executionSettings = new AzureOpenAIPromptExecutionSettings
             {
                 Temperature = _settings.GetSettings().Temperature,
                 Seed = _settings.GetSettings().Seed,
-                ServiceId = "completion",
                 FunctionChoiceBehavior = FunctionChoiceBehavior.Auto()
             };
 
-            var completionResponse = await ExecuteChatCompletionWithRetryAsync(
-                _chatCompletionService,
-                history,
-                executionSettings);
+            CompletionResponse completionResponse = new CompletionResponse();
+
+            switch (completionType)
+            {
+                case CompletionType.Chat:
+                    completionResponse = await ExecuteChatCompletionWithRetryAsync(
+                                               _chatCompletionService,
+                                               history,
+                                               executionSettings);
+                    break;
+                case CompletionType.Reasoning:
+                    completionResponse = await ExecuteChatCompletionWithRetryAsync(
+                                               _reasoningCompletionService,
+                                               history,
+                                               executionSettings);
+                    break;
+                default:
+                    break;
+            }
 
             if (!completionResponse.IsSuccess)
             {
@@ -288,63 +313,54 @@ namespace Infrastructure.Implementations.SemanticKernel
             history.AddSystemMessage("You are an document extractor expert. " +
                 "Your job is to extract requirements from the document. " +
                 "Some of the chunks provided can overlap each other, keep that in mind. " +
-                "Please make sure you extract all the requirements and try to categorize them. " +
-                "and return them in a markdown table format. ");
+                "Please make sure you extract all the requirements and categorize them. " +
+                "The output must be in markdown table format.");
             history.AddUserMessage(batchContent.ToString());
 
-            var response = await GetChatCompletion(history);
+            var response = await GetChatCompletion(history, CompletionType.Chat);
             return response.Content;
         }
 
         public async IAsyncEnumerable<StreamingChatMessageContent> GetCompliancyResponseStreamingViaCompletionAsync(string threadId, string extractedText, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            //string instruction = $"""
-            //        Formatting re-enabled
-            //        You are orchestrator to make sure all the neccesary information is available to validate a document regarding compliancy rules.
-            //        This is the plan you need to follow:
-            //        1. Process all the requirements for a given document: {uniqueExtractsString}, make sure all the requirements are extracted. Consolidate and refactor the input to have an uniform markdown table format.
-            //        2. Retrieve a list of the INCOSE guidelines (get_incose_rules) For every requirement you process, validate these according to the incose guidelines and follow the instructions of each guidelines to decide whether or not a requirement has passed the incose validation.
-            //        3. For each requirement, write the result of the validation in a markdown table format. Use the template (get_incose_template) to write the table that covers every requirement with its INCOSE assessment.
-            //        IMPORTANT: 
-            //        - Use the template (get_incose_template) to write the table that covers every requirement with its INCOSE assessment.
-            //        - Make sure all requirements have been checked and the output document covers all the requirements with their assessment.
-            //        - You might get feedback from the Reviewer agent, make sure you process this feedback and update the document accordingly. 
-            //        Keep in mind that the most important job is make sure that all requirements have been checked and the output document covers all the requirements with their assessment.
-            //        DO NOT MODIFY THE REQUIREMENTS, ONLY VALIDATE THESE AGAINST THE GUIDELINES.
-
-            //    """;
-
             string instruction = $"""
                 Formatting re-enabled.
                 You are the orchestrator tasked with validating the document compliancy.
-                Please process the following extracted requirements (one per file):
-                {extractedText}
     
                 Your tasks:
-                1. Validate each requirement against the INCOSE guidelines.
-                2. Return a markdown table with each requirement and its validation result.
+                1. Process all the requirements for a given document
+                2. Retrieve a list of the INCOSE guidelines
+                3. Validate each requirement against the INCOSE guidelines (get_incose_rules).
+                4. Return a markdown table with each requirement and its validation result.
                 DO NOT MODIFY THE REQUIREMENTS, ONLY VALIDATE THEM.
+                """;
+
+            string userPrompt = $"""
+                Please process the following extracted requirements (one per file):
+                {extractedText}
                 """;
 
             if (!_kernel.Plugins.Contains("get_incose_rules"))
             {
                 _kernel.Plugins.AddFromType<IncoseGuideLinesTool>("get_incose_rules");
             }
-            if(!_kernel.Plugins.Contains("get_incose_template"))
+            if (!_kernel.Plugins.Contains("get_incose_template"))
             {
                 _kernel.Plugins.AddFromType<IncoseTemplateTool>("get_incose_template");
             }
+
 
             var executionSettings = new AzureOpenAIPromptExecutionSettings
             {
                 Temperature = _settings.GetSettings().Temperature,
                 Seed = _settings.GetSettings().Seed,
-                ServiceId = "completion",
+                ServiceId = "reasoning",
                 ChatSystemPrompt = instruction,
                 FunctionChoiceBehavior = FunctionChoiceBehavior.Auto()
             };
 
             ChatHistory history = [];
+            history.AddUserMessage(userPrompt);
             var response = _chatCompletionService.GetStreamingChatMessageContentsAsync(
                 chatHistory: history,
                 kernel: _kernel,
@@ -359,10 +375,10 @@ namespace Infrastructure.Implementations.SemanticKernel
             }
         }
 
-        public async IAsyncEnumerable<AgentChatResponse> GetCompliancyResponseStreamingViaAgentsAsync(string threadId, List<IndexDoc> results,  [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        public async IAsyncEnumerable<AgentChatResponse> GetCompliancyResponseStreamingViaAgentsAsync(string threadId, string extractedText, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             // Set up agents
-            var chat = SetupAgentsAsync(threadId);
+            var chat = SetupAgentsAsync(extractedText);
 
             // Create a channel for both agent responses and heartbeats
             var channel = System.Threading.Channels.Channel.CreateUnbounded<AgentChatResponse>();
@@ -484,7 +500,7 @@ namespace Infrastructure.Implementations.SemanticKernel
             }
         }
 
-        private AgentGroupChat SetupAgentsAsync(string threadId)
+        private AgentGroupChat SetupAgentsAsync(string extractedText)
         {
             Kernel toolKernel = _kernel.Clone();
 
@@ -492,7 +508,7 @@ namespace Infrastructure.Implementations.SemanticKernel
             toolKernel.Plugins.AddFromType<IncoseTemplateTool>();
 
             ChatCompletionAgent agentReviewer = new Reviewer().CreateAgent(toolKernel, "Reviewer");
-            ChatCompletionAgent agentOrchestrator = new Orchestrator().CreateAgent(toolKernel, "Orchestrator");
+            ChatCompletionAgent agentOrchestrator = new Orchestrator().CreateAgent(toolKernel, "Orchestrator", extractedText);
 
             // Define a kernel function for the selection strategy
             KernelFunction terminationFunction =

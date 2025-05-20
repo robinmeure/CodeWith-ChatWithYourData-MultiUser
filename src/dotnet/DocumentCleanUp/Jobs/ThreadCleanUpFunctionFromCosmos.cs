@@ -8,7 +8,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Thread = Domain.Cosmos.Thread;
 
-namespace DocumentCleanUp;
+namespace CleanUpJobs.Jobs;
 
 public class ThreadCleanUpFunctionFromCosmos
 {

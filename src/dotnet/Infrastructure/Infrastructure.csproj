@@ -7,14 +7,15 @@
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
-    <NoWarn>1701;1702;KMEXP00;SKEXP0050;SKEXP0110</NoWarn>
+    <NoWarn>1701;1702;KMEXP00;SKEXP0050;SKEXP0110;SKEXP0070</NoWarn>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
-    <NoWarn>1701;1702;KMEXP00;SKEXP0050;SKEXP0110</NoWarn>
+    <NoWarn>1701;1702;KMEXP00;SKEXP0050;SKEXP0110;SKEXP0070</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Azure.AI.Inference" Version="1.0.0-beta.4" />
     <PackageReference Include="Azure.Identity" Version="1.13.2" />
     <PackageReference Include="Azure.Search.Documents" Version="11.6.0" />
     <PackageReference Include="Azure.Storage.Blobs" Version="12.24.0" />
@@ -32,6 +33,7 @@
     <PackageReference Include="Microsoft.SemanticKernel" Version="1.45.0" />
     <PackageReference Include="Microsoft.SemanticKernel.Agents.AzureAI" Version="1.47.0-preview" />
     <PackageReference Include="Microsoft.SemanticKernel.Agents.Core" Version="1.47.0" />
+    <PackageReference Include="Microsoft.SemanticKernel.Connectors.AzureAIInference" Version="1.49.0-beta" />
     <PackageReference Include="Microsoft.SemanticKernel.Connectors.OpenAI" Version="1.45.0" />
     <PackageReference Include="System.Text.Json" Version="9.0.4" />
   </ItemGroup>

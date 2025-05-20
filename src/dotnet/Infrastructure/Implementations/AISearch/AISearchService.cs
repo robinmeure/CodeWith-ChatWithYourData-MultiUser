@@ -1,25 +1,27 @@
-﻿using System;
+﻿using Azure;
+using Azure.Identity;
+using Azure.Search.Documents;
+using Azure.Search.Documents.Indexes;
+using Azure.Search.Documents.Indexes.Models;
+using Azure.Search.Documents.Models;
+using DocumentFormat.OpenXml.Office2010.Word;
+using Domain.Cosmos;
+using Domain.Search;
+using Infrastructure.Helpers;
+using Infrastructure.Interfaces;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Azure.Cosmos;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using Microsoft.KernelMemory.MemoryStorage;
+using Microsoft.SemanticKernel.Data;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Azure;
-using Azure.Identity;
-using Azure.Search.Documents;
-using Azure.Search.Documents.Indexes;
-using Azure.Search.Documents.Indexes.Models;
-using Azure.Search.Documents.Models;
-using Domain.Cosmos;
-using Domain.Search;
-using Infrastructure.Helpers;
-using Infrastructure.Interfaces;
-using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
-using Microsoft.KernelMemory.MemoryStorage;
-using Microsoft.SemanticKernel.Data;
 
 namespace Infrastructure.Implementations.AISearch
 {
@@ -252,7 +254,45 @@ namespace Infrastructure.Implementations.AISearch
                 Size = 100,
                 Filter = $"thread_id eq '{threadId}'",
                 QueryType = SearchQueryType.Full
-                
+            };
+            searchOptions.VectorSearch = new()
+            {
+                Queries = {
+                        new VectorizableTextQuery(text: query)
+                        {
+                            KNearestNeighborsCount = 3,
+                            Fields = { "content_vector" },
+                            Exhaustive = true
+                        }
+                    },
+            };
+
+            SearchResults<IndexDoc> response = await _searchClient.SearchAsync<IndexDoc>(query, searchOptions);
+
+            await foreach (SearchResult<IndexDoc> searchResult in response.GetResultsAsync())
+            {
+                docs.Add(searchResult.Document);
+            }
+
+            return docs;
+        }
+
+        public async Task<List<IndexDoc>> GetSearchResultsAsync(string query, string threadId, List<string> documentIds)
+        {
+            string? filterString = null;
+            if (documentIds != null && documentIds.Any())
+            {
+                filterString = string.Join(" or ", documentIds.Select(id => $"document_id eq '{id}'"));
+            }
+            filterString = filterString + $" and thread_id eq '{threadId}'";
+            List<IndexDoc> docs = new List<IndexDoc>();
+            //query = "*";
+
+            SearchOptions searchOptions = new SearchOptions
+            {
+                Size = 100,
+                Filter = filterString,
+                QueryType = SearchQueryType.Full
             };
             searchOptions.VectorSearch = new()
             {

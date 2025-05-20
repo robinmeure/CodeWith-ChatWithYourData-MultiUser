@@ -18,7 +18,6 @@ namespace Infrastructure.Implementations.SPE
         private readonly ILogger<SPEDocumentStore> _logger;
         private readonly IConfiguration _configuration;
         private readonly MSGraphService _graphService;
-        private readonly ITokenAcquisition _tokenAcquisition;
 
         private string containerTypeId;
         private string tenantId;
@@ -31,7 +30,6 @@ namespace Infrastructure.Implementations.SPE
             _logger = logger;
             _configuration = configuration;
             _graphService = graphService;
-            _tokenAcquisition = tokenAcquisition;
             tenantId = _configuration.GetValue<string>("SPE:TenantId") ?? "f903e023-a92d-4561-9a3b-d8429e3fa1fd";
             containerTypeId = _configuration.GetValue<string>("SPE:ContainerTypeId") ?? "aaace084-a939-40a0-98f0-919307b365ab";
         }
@@ -42,8 +40,7 @@ namespace Infrastructure.Implementations.SPE
             var driveId = await GetOrCreateDrive(folder, threadId);
 
             var documentId = Guid.NewGuid().ToString();
-            var graphAccessToken = await _tokenAcquisition.GetAccessTokenForUserAsync(new string[] { GraphScope.Default }, tenantId: tenantId);
-            var uploadedFile = await _graphService.AddFile(driveId:driveId.Id, accessToken: graphAccessToken, stream: document.OpenReadStream(), parentId:"root", name: fileName);
+            var uploadedFile = await _graphService.AddFile(driveId:driveId.Id, accessToken: string.Empty, stream: document.OpenReadStream(), parentId:"root", name: fileName);
 
             //then create a document in the cosmos db with the metadata of the document
             DocsPerThread docsPerThread = new()
@@ -62,40 +59,66 @@ namespace Infrastructure.Implementations.SPE
 
         internal async Task<Drive> GetOrCreateDrive(string driveId, string threadId)
         {
-            var graphAccessToken = await _tokenAcquisition.GetAccessTokenForUserAsync(new string[] { GraphScope.Default }, tenantId: tenantId);
-
-           
             if (!string.IsNullOrEmpty(driveId))
-                return await _graphService.GetDriveAsync(graphAccessToken, driveId);
+                return await _graphService.GetDriveAsync(driveId);
           
-            var container = await _graphService.AddContainerAsync(graphAccessToken, containerName:threadId, containerTypeId, threadId:threadId);
-            return await _graphService.GetDriveAsync(graphAccessToken, container.Id);
+            var container = await _graphService.CreateContainerAsync(containerName:threadId, containerTypeId, threadId:threadId);
+            return await _graphService.GetDriveAsync(container.Id);
           
         }
 
-        public Task<bool> DeleteDocumentAsync(string documentName, string folder)
+        public async Task<bool> DeleteDocumentAsync(string documentName, string folder)
         {
-            throw new NotImplementedException();
+            bool isDeleted = false;
+            try
+            {
+                var driveItem = await _graphService.GetDriveItem(folder, documentName);
+                if (driveItem != null)
+                {
+                    await _graphService.DeleteDriveItem(folder, driveItem.Id);
+                    isDeleted = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting document {DocumentName} in folder {Folder}", documentName, folder);
+            }
+            return isDeleted;
         }
 
-        public Task<bool> DocumentExistsAsync(string documentName, string folder)
+        public async Task<bool> DocumentExistsAsync(string documentName, string folder)
         {
-            throw new NotImplementedException();
+            bool itemExists = false;
+            try
+            {
+                var driveItem = await _graphService.GetDriveItem(folder, documentName);
+                itemExists = true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching document {DocumentName} in folder {Folder}", documentName, folder);
+            }
+            return itemExists;
         }
 
         public async Task<IEnumerable<DocsPerThread>> GetAllDocumentsAsync(string folder)
         {
             var results = new List<DocsPerThread>();
-            var graphAccessToken = await _tokenAcquisition.GetAccessTokenForUserAsync(new string[] { GraphScope.Default }, tenantId: tenantId);
-            var documents = await _graphService.SearchDriveItems(graphAccessToken, "isDocument:true", containerTypeId, 100);
+            var documents = await _graphService.SearchDriveItems("isDocument:true", containerTypeId);
             foreach (var driveItem in documents)
             {
+                string threadId = string.Empty;
+                if (driveItem.AdditionalData.TryGetValue("threadId", out var threadIdValue))
+                {
+                    threadId = threadIdValue.ToString();
+                }
+
                 DocsPerThread docsPerThread = new DocsPerThread()
                 {
                     DocumentName = driveItem.Name!,
-                    Folder = folder,
+                    Folder = driveItem.ParentReference.DriveId,
                     FileSize = driveItem.Size ?? 0,
-                    ThreadId = driveItem.AdditionalData["threadId"]?.ToString(),
+                    ThreadId = threadId,
                     UploadDate = driveItem.LastModifiedDateTime?.DateTime ?? DateTime.MinValue, // Fix for CS0029
                     UserId = string.Empty,
                     Id = driveItem.Id!,
@@ -110,8 +133,7 @@ namespace Infrastructure.Implementations.SPE
         public async Task<IEnumerable<string>> GetDocumentsAsync(string threadId, string folder)
         {
             var results = new List<string>();
-            var graphAccessToken = await _tokenAcquisition.GetAccessTokenForUserAsync(new string[] { GraphScope.Default }, tenantId: tenantId);
-            var documents = await _graphService.GetDriveRootItemsAsync(graphAccessToken, folder);
+            var documents = await _graphService.GetDriveRootItems(folder);
             foreach (var document in documents)
             {
                 results.Add(document.Name);

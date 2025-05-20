@@ -7,6 +7,7 @@ export interface ISetting {
     maxTokens: number,
     seed: number,
     predefinedPrompts: PredefinedPrompt[]
+    tools: Tool[]
 }
 
 export interface PredefinedPrompt
@@ -14,4 +15,11 @@ export interface PredefinedPrompt
     id: string;
     name: string;
     prompt: string;
+}
+
+export interface Tool
+{
+    id: string;
+    name: string;
+    description: string;
 }

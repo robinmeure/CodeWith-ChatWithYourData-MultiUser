@@ -95,6 +95,7 @@ export function Chatlist({
 
     const handleSelectChat = (chatId?: string) => {
         selectChat(chatId);
+        
     };
 
     const chatListContent = (

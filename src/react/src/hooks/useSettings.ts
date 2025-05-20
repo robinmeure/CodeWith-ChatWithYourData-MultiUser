@@ -29,7 +29,9 @@ export const useSettings = () => {
                 useSemanticRanker: newSettings.useSemanticRanker ?? currentSettings.useSemanticRanker ?? false,
                 temperature: newSettings.temperature ?? currentSettings.temperature ?? 0.7,
                 maxTokens: newSettings.maxTokens ?? currentSettings.maxTokens ?? 100,
-                seed: newSettings.seed ?? currentSettings.seed ?? 42,                predefinedPrompts: newSettings.predefinedPrompts ?? currentSettings.predefinedPrompts ?? []
+                seed: newSettings.seed ?? currentSettings.seed ?? 42,                
+                predefinedPrompts: newSettings.predefinedPrompts ?? currentSettings.predefinedPrompts ?? [],
+                tools: newSettings.tools ?? currentSettings.tools ?? []
             };
             
             LoggingService.log("Updating settings - merged result:", mergedSettings);

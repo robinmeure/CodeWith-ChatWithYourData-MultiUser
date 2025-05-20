@@ -17,8 +17,8 @@ namespace Domain.Chat
         /// <summary>
         /// Name of the agent that produced this message
         /// </summary>
-        [JsonPropertyName("agentName")]
-        public string AgentName { get; set; }
+        [JsonPropertyName("role")]
+        public string Role { get; set; }
         
         /// <summary>
         /// Content of the message
@@ -46,7 +46,7 @@ namespace Domain.Chat
             return new AgentChatResponse
             {
                 Type = "message",
-                AgentName = agentName,
+                Role = agentName,
                 Content = content,
                 Timestamp = DateTime.UtcNow,
                 IsFinal = isFinal
@@ -61,7 +61,7 @@ namespace Domain.Chat
             return new AgentChatResponse
             {
                 Type = "heartbeat",
-                AgentName = "system",
+                Role = "system",
                 Content = "processing",
                 Timestamp = DateTime.UtcNow,
                 IsFinal = false
