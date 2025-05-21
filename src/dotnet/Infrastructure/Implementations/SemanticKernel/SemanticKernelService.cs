@@ -1,27 +1,37 @@
-﻿using Domain.Chat;
+﻿using DocumentFormat.OpenXml.Bibliography;
+using DocumentFormat.OpenXml.Wordprocessing;
+using Domain.Chat;
 using Domain.Cosmos;
 using Domain.Search;
 using Infrastructure.Helpers;
+using Infrastructure.Implementations.SemanticKernel.Agents;
 using Infrastructure.Implementations.SemanticKernel.Tools;
 using Infrastructure.Interfaces;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Graph.Models;
+using Microsoft.JSInterop;
+using Microsoft.KernelMemory.DataFormats;
 using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.Agents.Chat;
 using Microsoft.SemanticKernel.Agents;
+using Microsoft.SemanticKernel.Agents.Chat;
+using Microsoft.SemanticKernel.Agents.Orchestration;
+using Microsoft.SemanticKernel.Agents.Orchestration.Sequential;
+using Microsoft.SemanticKernel.Agents.Runtime.InProcess;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.AzureOpenAI;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
+using Microsoft.SemanticKernel.TextGeneration;
+using Newtonsoft.Json.Linq;
 using OpenAI.Chat;
+using System.ComponentModel;
 using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Infrastructure.Implementations.SemanticKernel.Agents;
-using ChatMessageContent = Microsoft.SemanticKernel.ChatMessageContent;
+using System.Threading;
 using static Domain.Chat.Enums;
-using Microsoft.SemanticKernel.Connectors.AzureAIInference;
-using Newtonsoft.Json.Linq;
+using ChatMessageContent = Microsoft.SemanticKernel.ChatMessageContent;
 
 namespace Infrastructure.Implementations.SemanticKernel
 {
@@ -30,6 +40,7 @@ namespace Infrastructure.Implementations.SemanticKernel
         private readonly Kernel _kernel;
         private IChatCompletionService _chatCompletionService;
         private IChatCompletionService? _reasoningCompletionService;
+       
         private IServiceProvider _serviceProvider;
 
         private readonly ILogger<SemanticKernelService> _logger;
@@ -51,6 +62,7 @@ namespace Infrastructure.Implementations.SemanticKernel
             _kernel = kernel;
             _chatCompletionService = _kernel.GetRequiredService<IChatCompletionService>("completion");
             _reasoningCompletionService = _kernel.GetRequiredService<IChatCompletionService>("reasoning");
+          
             _serviceProvider = serviceProvider;
             _configuration = configuration;
             _logger = logger;
@@ -87,7 +99,7 @@ namespace Infrastructure.Implementations.SemanticKernel
         {
 
 
-            var executionSettings = new AzureAIInferencePromptExecutionSettings()
+            var executionSettings = new OpenAIPromptExecutionSettings()
             {
                 //ResponseFormat = typeof(FollowUpResponse),
                 
@@ -293,6 +305,8 @@ namespace Infrastructure.Implementations.SemanticKernel
             return completionResponse;
         }
 
+        [KernelFunction("extract_document")]
+        [Description("Extracts all the requirements for a given document based on given chunks")]
         public async Task<string> ExtractDocument(List<IndexDoc> searchResults)
         {
             StringBuilder batchContent = new StringBuilder();
@@ -321,233 +335,37 @@ namespace Infrastructure.Implementations.SemanticKernel
             return response.Content;
         }
 
-        public async IAsyncEnumerable<StreamingChatMessageContent> GetCompliancyResponseStreamingViaCompletionAsync(string threadId, string extractedText, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+
+        
+
+        public async IAsyncEnumerable<StreamingChatMessageContent> GetCompliancyResponseStreamingViaCompletionAsync(string threadId, List<string> documentIds, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            string instruction = $"""
-                Formatting re-enabled.
-                You are the orchestrator tasked with validating the document compliancy.
-    
-                Your tasks:
-                1. Process all the requirements for a given document
-                2. Retrieve a list of the INCOSE guidelines
-                3. Validate each requirement against the INCOSE guidelines (get_incose_rules).
-                4. Return a markdown table with each requirement and its validation result.
-                DO NOT MODIFY THE REQUIREMENTS, ONLY VALIDATE THEM.
-                """;
+            //string userPrompt = $"Please process the following documents: {string.Join(", ", documentIds)}.";
 
-            string userPrompt = $"""
-                Please process the following extracted requirements (one per file):
-                {extractedText}
-                """;
+            ChatHistory history = new ChatHistory();
+            ChatHistoryAgentThread agentThread = new(history);
 
-            if (!_kernel.Plugins.Contains("get_incose_rules"))
-            {
-                _kernel.Plugins.AddFromType<IncoseGuideLinesTool>("get_incose_rules");
-            }
-            if (!_kernel.Plugins.Contains("get_incose_template"))
-            {
-                _kernel.Plugins.AddFromType<IncoseTemplateTool>("get_incose_template");
-            }
+            ChatCompletionAgent incoseAgent = new IncoseAgent().CreateAgent(_kernel, "incoseagent");
+            ChatCompletionAgent extractAgent = new ExtractAgent().CreateAgent(_kernel, "extractagent", threadId);
+            ChatCompletionAgent validationAgent = new ValidationAgent().CreateAgent(_kernel, "validationagent", "incose");
 
-
-            var executionSettings = new AzureOpenAIPromptExecutionSettings
-            {
-                Temperature = _settings.GetSettings().Temperature,
-                Seed = _settings.GetSettings().Seed,
-                ServiceId = "reasoning",
-                ChatSystemPrompt = instruction,
-                FunctionChoiceBehavior = FunctionChoiceBehavior.Auto()
-            };
-
-            ChatHistory history = [];
-            history.AddUserMessage(userPrompt);
-            var response = _chatCompletionService.GetStreamingChatMessageContentsAsync(
-                chatHistory: history,
-                kernel: _kernel,
-                executionSettings: executionSettings,
-                cancellationToken: cancellationToken
-            );
-
-            string lastChunk = string.Empty;
-            await foreach (StreamingChatMessageContent chunk in response)
-            {
-                yield return chunk;
-            }
-        }
-
-        public async IAsyncEnumerable<AgentChatResponse> GetCompliancyResponseStreamingViaAgentsAsync(string threadId, string extractedText, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
-        {
-            // Set up agents
-            var chat = SetupAgentsAsync(extractedText);
-
-            // Create a channel for both agent responses and heartbeats
-            var channel = System.Threading.Channels.Channel.CreateUnbounded<AgentChatResponse>();
-
-            // Start a task to send heartbeats every 5 seconds
-            var heartbeatTask = Task.Run(async () =>
-            {
-                try
-                {
-                    while (!cancellationToken.IsCancellationRequested)
-                    {
-                        await Task.Delay(5000, cancellationToken);
-                        // Use TryWrite so that if the channel is closed, we break out of the loop instead of throwing.
-                        if (!channel.Writer.TryWrite(AgentChatResponse.CreateHeartbeat()))
-                        {
-                            _logger.LogTrace("Channel closed, stopping heartbeat task");
-                            break;
-                        }
-                        _logger.LogTrace("Heartbeat sent at {Time}", DateTime.UtcNow);
-                    }
-                }
-                catch (OperationCanceledException)
-                {
-                    // Cancellation is expected; do nothing.
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error in heartbeat task");
-                }
-            }, cancellationToken);
-
-            // Start a task to process agent responses
-            var agentTask = Task.Run(async () =>
-            {
-                try
-                {
-                    await foreach (StreamingChatMessageContent response in chat.InvokeStreamingAsync().WithCancellation(cancellationToken))
-                    {
-                        await channel.Writer.WriteAsync(
-                            AgentChatResponse.CreateAgentMessage(
-                                response.AuthorName,
-                                response.Content,
-                                false), // Not the final message
-                            cancellationToken);
-                    }
-
-                    // Get the full chat history to find the last Reviewer message
-                    var messages = new List<ChatMessageContent>();
-                    await foreach (var message in chat.GetChatMessagesAsync().WithCancellation(cancellationToken))
-                    {
-                        messages.Add(message);
-                    }
-
-                    // Find and send the final message from the Reviewer
-                    var finalMessage = messages
-                        .Where(m => m.AuthorName == "Orchestrator")
-                        .FirstOrDefault();
-
-                    if (finalMessage != null)
-                    {
-                        await channel.Writer.WriteAsync(
-                            AgentChatResponse.CreateAgentMessage(
-                                finalMessage.AuthorName,
-                                finalMessage.Content,
-                                true), // This is the final message
-                            cancellationToken);
-                    }
-                    else
-                    {
-                        // If no final message from reviewer, send a fallback message
-                        await channel.Writer.WriteAsync(
-                            AgentChatResponse.CreateAgentMessage(
-                                "System",
-                                "Processing complete, but no final response was generated.",
-                                true), // Final message
-                            cancellationToken);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error processing agent responses");
-
-                    // Send an error message so the client knows something went wrong
-                    try
-                    {
-                        await channel.Writer.WriteAsync(
-                            AgentChatResponse.CreateAgentMessage(
-                                "System",
-                                "An error occurred while processing your request.",
-                                true), // Final message
-                            CancellationToken.None); // Use None to ensure the error gets sent
-                    }
-                    catch
-                    {
-                        // Ignore any errors from sending the error message
-                    }
-                }
-                finally
-                {
-                    // Complete the channel when done to signal no more messages
-                    channel.Writer.Complete();
-                }
-            }, cancellationToken);
-
-            // Read all messages from the channel and yield them to the caller
-            await foreach (var response in channel.Reader.ReadAllAsync(cancellationToken))
-            {
+            string input = string.Empty;
+            await foreach (var response in ProcessAgentStreamingResponsesAsync(incoseAgent, input, agentThread, cancellationToken))
                 yield return response;
-            }
 
-            // Clean up the heartbeat task when done
-            try
-            {
-                await heartbeatTask;
-            }
-            catch
-            {
-                // Ignore any errors during cleanup
-            }
+            string guideLines = agentThread.ChatHistory.Where(x => x.AuthorName == "incoseagent" && x.Role == AuthorRole.Tool).LastOrDefault()?.Content ?? string.Empty;
+            
+            await foreach (var response in ProcessAgentStreamingResponsesAsync(extractAgent, input, agentThread, cancellationToken))
+                yield return response;
+
+            string extractedText = agentThread.ChatHistory.Where(x => x.AuthorName == "extractagent").LastOrDefault()?.Content ?? string.Empty;
+
+            input = $"Please review all the requirements: {extractedText} against the guidelines: {guideLines}";
+
+            await foreach (var response in ProcessAgentStreamingResponsesAsync(validationAgent, input, agentThread, cancellationToken))
+                yield return response;
         }
-
-        private AgentGroupChat SetupAgentsAsync(string extractedText)
-        {
-            Kernel toolKernel = _kernel.Clone();
-
-            toolKernel.Plugins.AddFromType<IncoseGuideLinesTool>();
-            toolKernel.Plugins.AddFromType<IncoseTemplateTool>();
-
-            ChatCompletionAgent agentReviewer = new Reviewer().CreateAgent(toolKernel, "Reviewer");
-            ChatCompletionAgent agentOrchestrator = new Orchestrator().CreateAgent(toolKernel, "Orchestrator", extractedText);
-
-            // Define a kernel function for the selection strategy
-            KernelFunction terminationFunction =
-                AgentGroupChat.CreatePromptFunctionForStrategy(
-                    $$$"""
-                    Determine if the reviewer has approved.  If so, respond with a single word: yes
-
-                    History:
-                    {{$history}}
-                    """,
-                    safeParameterNames: "history");
-
-            // Define the termination strategy
-            KernelFunctionTerminationStrategy terminationStrategy =
-              new(terminationFunction, _kernel)
-              {
-                  // Only the reviewer may give approval.
-                  Agents = [agentReviewer],
-                  // Parse the function response.
-                  ResultParser = (result) =>
-                    result.GetValue<string>()?.Contains("yes", StringComparison.OrdinalIgnoreCase) ?? false,
-                  // The prompt variable name for the history argument.
-                  HistoryVariableName = "history",
-                  // Save tokens by not including the entire history in the prompt
-                  //HistoryReducer = new ChatHistoryTruncationReducer(1),
-                  // Limit total number of turns no matter what
-                  MaximumIterations = 10,
-              };
-
-            // Create a chat using the defined termination strategy.
-            AgentGroupChat chat =
-                new(agentOrchestrator, agentReviewer)
-                {
-                    ExecutionSettings = new() { TerminationStrategy = terminationStrategy }
-                };
-
-            return chat;
-        }
-
+      
         public async Task IsHealthyAsync()
         {
             try
@@ -774,6 +592,39 @@ namespace Infrastructure.Implementations.SemanticKernel
                     StatusCode = (int)(ex.StatusCode ?? HttpStatusCode.InternalServerError),
                     Message = ex.Message
                 };
+            }
+        }
+
+        /// <summary>
+        /// Helper method to process streaming responses from any agent
+        /// </summary>
+        private async IAsyncEnumerable<StreamingChatMessageContent> ProcessAgentStreamingResponsesAsync(
+            ChatCompletionAgent agent,
+            string input,
+            ChatHistoryAgentThread agentThread,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await foreach (StreamingChatMessageContent response in agent.InvokeStreamingAsync(message: input, agentThread))
+            {
+                if (string.IsNullOrEmpty(response.Content))
+                {
+                    StreamingFunctionCallUpdateContent? functionCall = response.Items
+                        .OfType<StreamingFunctionCallUpdateContent>()
+                        .SingleOrDefault();
+
+                    if (!string.IsNullOrEmpty(functionCall?.Name))
+                    {
+                        _logger.LogInformation("{Role} - {Author}: FUNCTION CALL - {FunctionName}",
+                            response.Role,
+                            response.AuthorName ?? "*",
+                            functionCall.Name);
+
+                        _logger.LogDebug("Function call details: {Details}", functionCall.InnerContent);
+                    }
+                    continue;
+                }
+
+                yield return response;
             }
         }
     }

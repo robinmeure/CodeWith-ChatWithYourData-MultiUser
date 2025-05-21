@@ -352,6 +352,7 @@ export function ChatInput({ value, setValue, onSubmit, clearChat, predefinedProm
         // Add tool ID to selectedToolIds if not already selected
         if (!selectedToolIds.includes(tool.id)) {
             setSelectedToolIds([...selectedToolIds, tool.id]);
+            setValue(value + ` ${tool.name}`);
         }
         setIsToolsModalOpen(false);
     };
@@ -470,14 +471,15 @@ export function ChatInput({ value, setValue, onSubmit, clearChat, predefinedProm
                                     size="small"
                                 />
                                )}                                                              
-                            </div>
-                              <div className={classes.rightButtons}>                                <Button 
+                            </div>                              
+                            <div className={classes.rightButtons}>                                
+                                <Button 
                                     className={classes.sendButton} 
                                     onClick={handleSubmit} 
                                     icon={<Send24Regular />}
-                                    disabled={!value.trim()}
+                                    disabled={!value.trim() && selectedToolIds.length === 0}
                                     title="Send message"
-                                    appearance={value.trim() ? "primary" : "subtle"}
+                                    appearance={(value.trim() || selectedToolIds.length > 0) ? "primary" : "subtle"}
                                     size="small"
                                 />
                             </div>

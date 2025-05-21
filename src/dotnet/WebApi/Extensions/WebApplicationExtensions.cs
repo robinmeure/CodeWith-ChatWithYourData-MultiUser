@@ -23,47 +23,6 @@ namespace WebApi.Extensions
 {
     public static class WebApplicationBuilderExtensions
     {
-        //public static void AddSemanticKernelLogging(this WebApplicationBuilder builder)
-        //{
-        //    // Replace the connection string with your Application Insights connection string
-        //    var connectionString = builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"];
-
-        //    var resourceBuilder = ResourceBuilder
-        //        .CreateDefault()
-        //        .AddService("TelemetryApplicationInsightsQuickstart");
-
-        //    // Enable model diagnostics with sensitive data.
-        //    AppContext.SetSwitch("Microsoft.SemanticKernel.Experimental.GenAI.EnableOTelDiagnosticsSensitive", true);
-
-        //    using var traceProvider = Sdk.CreateTracerProviderBuilder()
-        //        .SetResourceBuilder(resourceBuilder)
-        //        .AddSource("Microsoft.SemanticKernel*")
-        //        .AddAzureMonitorTraceExporter(options => options.ConnectionString = connectionString)
-        //        .Build();
-
-        //    using var meterProvider = Sdk.CreateMeterProviderBuilder()
-        //        .SetResourceBuilder(resourceBuilder)
-        //        .AddMeter("Microsoft.SemanticKernel*")
-        //        .AddAzureMonitorMetricExporter(options => options.ConnectionString = connectionString)
-        //        .Build();
-
-        //    var loggerFactory = LoggerFactory.Create(builder =>
-        //    {
-        //        // Add OpenTelemetry as a logging provider
-        //        builder.AddOpenTelemetry(options =>
-        //        {
-        //            options.SetResourceBuilder(resourceBuilder);
-        //            options.AddAzureMonitorLogExporter(options => options.ConnectionString = connectionString);
-        //            // Format log messages. This is default to false.
-        //            options.IncludeFormattedMessage = true;
-        //            options.IncludeScopes = true;
-        //        });
-        //        builder.SetMinimumLevel(LogLevel.Information);
-        //    });
-
-        //    builder.Services.AddSingleton(loggerFactory);
-        //}
-
         public static void AddKernelMemory(this WebApplicationBuilder builder, DefaultAzureCredential azureCredential)
         {
             var openAIConfig = builder.Configuration.GetSection("OpenAI");

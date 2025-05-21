@@ -14,6 +14,7 @@ using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.KernelMemory.MemoryStorage;
+using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.Data;
 using System;
 using System.Collections.Generic;
@@ -198,6 +199,7 @@ namespace Infrastructure.Implementations.AISearch
             return response.TotalCount ?? 0;
         }
 
+        
         public async Task<List<IndexDoc>> GetExtractedResultsAsync(string threadId)
         {
             List<IndexDoc> docs = new List<IndexDoc>();
@@ -226,8 +228,11 @@ namespace Infrastructure.Implementations.AISearch
            
         }
 
+        [KernelFunction("get_extracted_results")]
         public async Task<IndexDoc> GetExtractedResultsAsync(string threadId, string documentId)
         {
+            Console.WriteLine("get_extracted_results");
+
             SearchOptions searchOptions = new SearchOptions
             {
                 Size = 1,
@@ -245,8 +250,11 @@ namespace Infrastructure.Implementations.AISearch
             return null;
         }
 
+        [KernelFunction("get_documents_from_thread")]
         public async Task<List<IndexDoc>> GetSearchResultsAsync(string query, string threadId)
         {
+            Console.WriteLine("get_documents_from_thread");
+
             List<IndexDoc> docs = new List<IndexDoc>();
 
             SearchOptions searchOptions = new SearchOptions
@@ -255,9 +263,12 @@ namespace Infrastructure.Implementations.AISearch
                 Filter = $"thread_id eq '{threadId}'",
                 QueryType = SearchQueryType.Full
             };
-            searchOptions.VectorSearch = new()
+
+            if (query != "*")
             {
-                Queries = {
+                searchOptions.VectorSearch = new()
+                {
+                    Queries = {
                         new VectorizableTextQuery(text: query)
                         {
                             KNearestNeighborsCount = 3,
@@ -265,7 +276,8 @@ namespace Infrastructure.Implementations.AISearch
                             Exhaustive = true
                         }
                     },
-            };
+                };
+            }
 
             SearchResults<IndexDoc> response = await _searchClient.SearchAsync<IndexDoc>(query, searchOptions);
 
@@ -286,7 +298,7 @@ namespace Infrastructure.Implementations.AISearch
             }
             filterString = filterString + $" and thread_id eq '{threadId}'";
             List<IndexDoc> docs = new List<IndexDoc>();
-            //query = "*";
+          
 
             SearchOptions searchOptions = new SearchOptions
             {
@@ -316,8 +328,11 @@ namespace Infrastructure.Implementations.AISearch
             return docs;
         }
 
+        [KernelFunction("get_document_chunks")]
         public async Task<List<IndexDoc>> GetDocumentAsync(string documentId)
         {
+            Console.WriteLine("get_document_chunks");
+
             List<IndexDoc> docs = new List<IndexDoc>();
 
             SearchOptions searchOptions = new SearchOptions

@@ -34,20 +34,21 @@ namespace Infrastructure.Implementations.SemanticKernel.Tools
 
         [KernelFunction("get_incose_rules")]
         [Description("Retrieve a list of compliancy rules regarding INCOSE")]
-        public string GetCompliancyRulesForCategory()
+        public List<GuideLines> GetCompliancyRulesForCategory()
         {
             Console.WriteLine("--- Guideline Invoked ---");
 
-            var result = new StringBuilder();
-            foreach (var file in fileRecordsMap)
-            {
-                var records = file.Value;
-                foreach (var record in records)
-                {
-                    result.AppendLine($"{record.Name}: {record.Definition} - { record.Instructions}");
-                }
-            }
-            return result.ToString();
+            return fileRecordsMap["guidelines"];
+            //var result = new StringBuilder();
+            //foreach (var file in fileRecordsMap)
+            //{
+            //    var records = file.Value;
+            //    foreach (var record in records)
+            //    {
+            //        result.AppendLine($"{record.Name}: {record.Definition} - { record.Instructions}");
+            //    }
+            //}
+            //return result.ToString();
         }
 
         public void LoadGuidelines(string folderPath)
@@ -92,7 +93,6 @@ namespace Infrastructure.Implementations.SemanticKernel.Tools
 
     public class GuideLines()
     { 
-        public int Id { get; set; }
         public string? Name { get; set; }
         public string? Definition { get; set; }
         public string? Instructions { get; set; }

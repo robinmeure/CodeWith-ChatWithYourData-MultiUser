@@ -20,11 +20,11 @@ namespace Infrastructure.Implementations.SemanticKernel.Tools
             return $$"""
             [
                 {
-                  "ID": "R00.001",
-                  "Requirement": "locked rotor and locking moving parts",
-                  "Description":"locked rotor and locking moving parts",              
-                  "Remarks": "No product requirement created as limits are not critical",
-                  "INCOSE Assessment":"{Pass/Evaluate/Rewrite/Unable}",
+                  "ID": "",
+                  "Requirement": "",
+                  "Description":"",              
+                  "Remarks": "",
+                  "INCOSE Assessment":"",
                   "INCOSE Notes":""
                 }
             ]

@@ -1,28 +1,30 @@
+using Azure.Core;
+using Azure.Core.Pipeline;
 using Azure.Identity;
-using Azure.Search.Documents.Indexes;
-using Infrastructure.Helpers;
-using Microsoft.Azure.Cosmos;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.Identity.Web;
-using Microsoft.AspNetCore.Http.Features;
-using WebApi.Extensions;
-using Domain.Chat;
 using Azure.Monitor.OpenTelemetry.AspNetCore;
-using Microsoft.AspNetCore.Diagnostics.HealthChecks;
-using System.Text.Json;
-using Infrastructure.Interfaces;
-using Infrastructure.Implementations.SPE;
+using Azure.Search.Documents.Indexes;
+using Domain.Chat;
+using Infrastructure.Helpers;
+using Infrastructure.Implementations.AISearch;
 using Infrastructure.Implementations.Cosmos;
 using Infrastructure.Implementations.SemanticKernel;
-using Infrastructure.Implementations.AISearch;
-using WebApi.HealthChecks;
-using Microsoft.SemanticKernel;
-using Azure.AI.Inference;
+using Infrastructure.Implementations.SemanticKernel.Agents;
+using Infrastructure.Implementations.SemanticKernel.Tools;
+using Infrastructure.Implementations.SPE;
+using Infrastructure.Interfaces;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.Http.Features;
+using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.AI;
-using Azure.Core.Pipeline;
-using Azure.Core;
-
+using Microsoft.Extensions.Azure;
+using Microsoft.Identity.Web;
+using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
+using System.ComponentModel.Design;
+using System.Text.Json;
+using WebApi.Extensions;
+using WebApi.HealthChecks;
 
 namespace WebApi
 {
@@ -39,7 +41,6 @@ namespace WebApi
             var azureCredential = new DefaultAzureCredential(azureCredentialOptions);
 
             builder.AddServiceDefaults();
-            //builder.AddSemanticKernelLogging();
 
             var httpClient = new HttpClient
             {
@@ -107,13 +108,25 @@ namespace WebApi
             string? reasoningModel = builder.Configuration["OpenAI:ReasoningModel"];
             string? embeddingModel = builder.Configuration["OpenAI:EmbeddingModel"];
 
-            // ----------  Azure OpenAI with Semantic Kernel setup ----------------
-            Kernel kernel = Kernel.CreateBuilder()
-                .AddAzureOpenAIChatCompletion(endpoint:endpoint, deploymentName:completionModel, credentials:azureCredential, serviceId: "completion")
-                .AddAzureOpenAIChatCompletion(endpoint:endpoint, deploymentName:reasoningModel, credentials:azureCredential, serviceId: "reasoning")
-                .Build();
+            builder.Services.AddSingleton<SearchTool>();
 
-            builder.Services.AddSingleton(kernel);
+            // ----------  Azure OpenAI with Semantic Kernel setup ----------------
+            builder.Services.AddKernel().AddAzureOpenAIChatCompletion(
+                   deploymentName: reasoningModel!,
+                   endpoint: endpoint!,
+                   azureCredential,
+                   serviceId: "reasoning", // this is the service id for the agents for reasoning we use o3
+                   httpClient: httpClient
+               );
+
+            builder.Services.AddKernel().AddAzureOpenAIChatCompletion(
+                    deploymentName: completionModel!,
+                    endpoint: endpoint!,
+                    azureCredential,
+                    serviceId: "completion", // this is the service id for the formatting of the document, using gpt4o
+                    httpClient: httpClient // this is the long timeout client we created above
+                );
+
             builder.AddKernelMemory(azureCredential);            
             builder.Services.AddSingleton<ISearchService, AISearchService>();
             builder.Services.AddSingleton<IThreadRepository, CosmosThreadRepository>();

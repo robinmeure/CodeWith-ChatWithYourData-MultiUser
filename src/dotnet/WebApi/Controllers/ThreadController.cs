@@ -1,4 +1,3 @@
-using Azure.AI.Inference;
 using Domain.Chat;
 using Domain.Cosmos;
 using Domain.Search;
@@ -408,173 +407,6 @@ namespace WebApi.Controllers
             }
         }        
         
-        [HttpPost("{threadId}/messages/compliancy/stream")]
-        [Produces("text/event-stream")]
-        public async Task<IActionResult> StreamCompliancyResponse(
-            [FromRoute] string threadId, 
-            [FromBody] MessageRequest messageRequest, 
-            CancellationToken cancellationToken)
-        {
-            string? userId = HttpContext.GetUserId();
-            if (userId == null)
-            {
-                _logger.LogWarning("Stream compliancy called with null userId");
-                return BadRequest(new { error = "User ID is required." });
-            }
-
-            if (string.IsNullOrEmpty(threadId))
-            {
-                _logger.LogWarning("Stream compliancy called with null or empty threadId");
-                return BadRequest(new { error = "Thread ID is required." });
-            }
-
-            if (messageRequest == null || string.IsNullOrEmpty(messageRequest.Message))
-            {
-                _logger.LogWarning("Stream compliancy called with null or empty message");
-                return BadRequest(new { error = "Message content is required." });
-            }
-
-            _logger.LogInformation("Processing streaming compliancy response for threadId: {ThreadId}", threadId);
-
-            try
-            {
-                // Save the user's message
-                await _threadRepository.PostMessageAsync(
-                    userId,
-                    new ThreadMessage
-                    {
-                        Id = Guid.NewGuid().ToString(),
-                        ThreadId = threadId,
-                        UserId = userId,
-                        Role = "user",
-                        Content = messageRequest.Message,
-                        Type = "CHAT_MESSAGE",
-                        Created = DateTime.UtcNow
-                    },
-                    cancellationToken);
-
-                // Get search results
-                var history = _aiService.BuildConversationHistory(
-                    await _threadRepository.GetMessagesAsync(userId, threadId, cancellationToken), 
-                    messageRequest.Message);
-                    
-                var query = messageRequest.Message;
-
-                string uniqueExtractsString = string.Empty;
-                var extractedDocs = await _search.GetExtractedResultsAsync(threadId);
-                foreach (var extractedDoc in extractedDocs)
-                {
-                    uniqueExtractsString += string.Join(Environment.NewLine, extractedDoc.Extract);
-                }
-                
-                // Get the agent stream
-                //var stream = _aiService.GetCompliancyResponseStreamingViaAgentsAsync(threadId, uniqueExtractsString, cancellationToken);
-
-                // Get the chatcompletion stream
-                var stream = _aiService.GetCompliancyResponseStreamingViaCompletionAsync(threadId, uniqueExtractsString, cancellationToken);
-
-                string finalContent = null;
-
-                // Process and send each chunk in the stream
-                await foreach (var chatResponse in stream.WithCancellation(cancellationToken))
-                {
-                    string payload = System.Text.Json.JsonSerializer.Serialize(
-                        new { role = chatResponse.Role.ToString(), content = chatResponse.Content, final = false });
-                    await Response.WriteAsync($"data: {payload}\n\n", cancellationToken);
-                    await Response.Body.FlushAsync(cancellationToken);
-
-                    finalContent += chatResponse.Content;
-                }
-
-
-
-                // Send a final message with follow-up questions as part of the SSE stream
-                if (!string.IsNullOrWhiteSpace(finalContent))
-                {
-                    // Generate follow-up questions if enabled
-                    var followUpQuestionList = _settings.GetSettings().AllowFollowUpPrompts
-                        ? await _aiService.GenerateFollowUpQuestionsAsync(history, finalContent, finalContent)
-                        : Array.Empty<string>();
-
-                    // Send the final message with follow-up questions
-                    string finalPayload = System.Text.Json.JsonSerializer.Serialize(
-                        new
-                        {
-                            role = "assistant",
-                            content = finalContent,
-                            followupQuestions = followUpQuestionList,
-                            final = true
-                        });
-                    await Response.WriteAsync($"data: {finalPayload}\n\n", cancellationToken);
-                    await Response.Body.FlushAsync(cancellationToken);
-
-                    // Fire and forget saving the final assistant message to the database
-                    _ = Task.Run(async () =>
-                    {
-                        try
-                        {
-                            await _threadRepository.PostMessageAsync(
-                                userId,
-                                new ThreadMessage
-                                {
-                                    Id = Guid.NewGuid().ToString(),
-                                    ThreadId = threadId,
-                                    UserId = userId,
-                                    Role = "assistant",
-                                    Content = finalContent,
-                                    Type = "CHAT_MESSAGE",
-                                    Created = DateTime.UtcNow,
-                                    Context = new ResponseContext(
-                                        DataPointsContent: null,
-                                        FollowupQuestions: followUpQuestionList,
-                                        Thoughts: Array.Empty<Thoughts>(),
-                                        UsageMetrics: null)
-                                },
-                                CancellationToken.None);
-                            _logger.LogInformation("Successfully saved final compliancy response for threadId: {ThreadId}", threadId);
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogError(ex, "Error saving final compliancy response for threadId: {ThreadId}", threadId);
-                        }
-                    });
-                }
-
-                return new EmptyResult();
-            
-            }
-            catch (ServiceException ex)
-            {
-                _logger.LogError(ex, "Service error in stream compliancy: {Type} - {Message}", ex.ServiceType, ex.Message);
-                return StatusCode(StatusCodes.Status503ServiceUnavailable, 
-                    new { 
-                        error = $"Service unavailable: {ex.ServiceType}", 
-                        details = ex.Message,
-                        requestId = HttpContext.TraceIdentifier
-                    });
-            }
-            catch (HttpOperationException httpEx)
-            {
-                _logger.LogError(httpEx, "HTTP operation failed: {Message}", httpEx.Message);
-                return StatusCode((int)(httpEx.StatusCode ?? HttpStatusCode.InternalServerError), 
-                    new { 
-                        error = "Service temporarily unavailable", 
-                        details = httpEx.Message,
-                        requestId = HttpContext.TraceIdentifier
-                    });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Unexpected error processing streaming compliancy for threadId: {ThreadId}", threadId);
-                return StatusCode(StatusCodes.Status500InternalServerError, 
-                    new { 
-                        error = "An unexpected error occurred", 
-                        details = ex.Message,
-                        requestId = HttpContext.TraceIdentifier
-                    });
-            }
-        }
-
         [HttpPost("{threadId}/messages/stream")]
         [Produces("text/event-stream")]
         public async Task<IActionResult> StreamChatResponse(
@@ -636,20 +468,17 @@ namespace WebApi.Controllers
 
                 IAsyncEnumerable<StreamingChatMessageContent> stream = null;
 
+                // because we now have a payload in the request body that indicates whether or not we are using a tool, we need to check that first.
                 if (toolName == "incose")
                 {
-                    // Perform specific logic for "incose" tool
-                    // Example: Implement a special search or processing here
-                    var uniqueExtractsString = string.Empty;
-                    var extractedDocs = await _search.GetExtractedResultsAsync(threadId);
-                    foreach (var extractedDoc in extractedDocs)
-                    {
-                        uniqueExtractsString += string.Join(Environment.NewLine, extractedDoc.Extract);
-                    }
-                    stream = _aiService.GetCompliancyResponseStreamingViaCompletionAsync(threadId, uniqueExtractsString, cancellationToken);
+                    //// Perform specific logic for "incose" tool
+                    var documents = await _search.GetSearchResultsAsync("*", threadId);
+                    var documentIds = documents.Select(d => d.DocumentId).ToList();
+                    stream = _aiService.GetCompliancyResponseStreamingViaCompletionAsync(threadId, documentIds, cancellationToken);
                 }
                 else
-                { 
+                {
+                    // if there is not tool selected, then check if a document is selected (this is done to make sure you can talk to individual documents instead of the whole thread)
                     // if a document is selected, we need to search for that document only
                     var searchResults = (messageRequest.DocumentIds.Count > 0) ?
                         await PerformSearchAsync(history, query, threadId, messageRequest.DocumentIds, cancellationToken) :
