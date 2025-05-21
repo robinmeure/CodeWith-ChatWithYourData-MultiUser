@@ -473,8 +473,7 @@ namespace WebApi.Controllers
                 {
                     //// Perform specific logic for "incose" tool
                     var documents = await _search.GetSearchResultsAsync("*", threadId);
-                    var documentIds = documents.Select(d => d.DocumentId).ToList();
-                    stream = _aiService.GetCompliancyResponseStreamingViaCompletionAsync(threadId, documentIds, cancellationToken);
+                    stream = _aiService.GetCompliancyResponseStreamingViaCompletionAsync(threadId, documents, cancellationToken);
                 }
                 else
                 {

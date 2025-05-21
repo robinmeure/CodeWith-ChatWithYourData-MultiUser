@@ -335,18 +335,13 @@ namespace Infrastructure.Implementations.SemanticKernel
             return response.Content;
         }
 
-
-        
-
-        public async IAsyncEnumerable<StreamingChatMessageContent> GetCompliancyResponseStreamingViaCompletionAsync(string threadId, List<string> documentIds, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        public async IAsyncEnumerable<StreamingChatMessageContent> GetCompliancyResponseStreamingViaCompletionAsync(string threadId, List<IndexDoc> documents, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            //string userPrompt = $"Please process the following documents: {string.Join(", ", documentIds)}.";
-
             ChatHistory history = new ChatHistory();
             ChatHistoryAgentThread agentThread = new(history);
 
             ChatCompletionAgent incoseAgent = new IncoseAgent().CreateAgent(_kernel, "incoseagent");
-            ChatCompletionAgent extractAgent = new ExtractAgent().CreateAgent(_kernel, "extractagent", threadId);
+            ChatCompletionAgent extractAgent = new ExtractAgent().CreateAgent(_kernel, "extractagent", threadId, documents);
             ChatCompletionAgent validationAgent = new ValidationAgent().CreateAgent(_kernel, "validationagent", "incose");
 
             string input = string.Empty;
